@@ -250,6 +250,15 @@ protected:
     * UI Callbacks (optional) */
 
    /**
+      Optional callback invoked when telemetry data is received from the DSP/Plugin side.
+      @note This function is called on the main UI thread during idle/timer ticks.
+      @param tag The identifier specified by the DSP side in postTelemetry().
+      @param data Pointer to the payload bytes (valid only for the duration of this call).
+      @param size Size of the payload in bytes.
+    */
+    virtual void uiTelemetryReceived(uint32_t tag, const void* data, uint32_t size);
+
+   /**
       UI idle function, called to give idle time to the plugin UI directly from the host.
       This is called right after OS event handling and Window idle events (within the same cycle).
       There are no guarantees in terms of timing.

@@ -61,6 +61,8 @@
 
 START_NAMESPACE_DISTRHO
 
+class DataRingBuffer;
+
 /* define webview start */
 #if defined(HAVE_X11) && defined(DISTRHO_OS_LINUX) && DISTRHO_UI_WEB_VIEW
 # define DISTRHO_UI_LINUX_WEBVIEW_START
@@ -268,6 +270,7 @@ struct UI::PrivateData {
     double   sampleRate;
     uint32_t parameterOffset;
     void*    dspPtr;
+    DataRingBuffer* dspTelemetryRingBuffer;
 
     // UI
     uint bgColor;
@@ -301,6 +304,7 @@ struct UI::PrivateData {
           sampleRate(0),
           parameterOffset(0),
           dspPtr(nullptr),
+          dspTelemetryRingBuffer(nullptr),
           bgColor(0),
           fgColor(0xffffffff),
           scaleFactor(1.0),

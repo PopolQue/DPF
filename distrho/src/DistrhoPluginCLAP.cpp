@@ -25,6 +25,8 @@
 #include "DistrhoPluginInternal.hpp"
 #include "extra/ScopedPointer.hpp"
 
+#include <algorithm>
+
 #ifndef DISTRHO_PLUGIN_CLAP_ID
 # error DISTRHO_PLUGIN_CLAP_ID undefined!
 #endif
@@ -977,6 +979,13 @@ public:
         fPlugin.setTimePosition(fTimePosition);
        #endif
 
+        struct QueuedClapParamChange {
+            uint32_t offset;
+            const clap_event_param_value_t* event;
+        };
+        QueuedClapParamChange paramChanges[128];
+        uint32_t paramChangeCount = 0;
+
         if (const clap_input_events_t* const inputEvents = process->in_events)
         {
             if (const uint32_t len = inputEvents->size(inputEvents))
@@ -1007,7 +1016,19 @@ public:
                         DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_param_value_t),
                                                         event->size, sizeof(clap_event_param_value_t));
                         if (event->space_id == 0)
-                            setParameterValueFromEvent(reinterpret_cast<const clap_event_param_value_t*>(event));
+                        {
+                            const clap_event_param_value_t* const pval = reinterpret_cast<const clap_event_param_value_t*>(event);
+                            if (paramChangeCount < 128)
+                            {
+                                paramChanges[paramChangeCount].offset = (event->time < process->frames_count) ? event->time : (process->frames_count > 0 ? process->frames_count - 1 : 0);
+                                paramChanges[paramChangeCount].event = pval;
+                                ++paramChangeCount;
+                            }
+                            else
+                            {
+                                setParameterValueFromEvent(pval);
+                            }
+                        }
                         break;
                     case CLAP_EVENT_PARAM_MOD:
                     case CLAP_EVENT_PARAM_GESTURE_BEGIN:
@@ -1078,6 +1099,7 @@ public:
             }
            #else
             constexpr const float** const audioInputs = nullptr;
+            (void)audioInputs;
            #endif
 
            #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
@@ -1105,15 +1127,93 @@ public:
             }
            #else
             constexpr float** const audioOutputs = nullptr;
+            (void)audioOutputs;
            #endif
 
             fOutputEvents = process->out_events;
 
-           #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
-            fPlugin.run(audioInputs, audioOutputs, frames, fMidiEvents, fMidiEventCount);
-           #else
-            fPlugin.run(audioInputs, audioOutputs, frames);
-           #endif
+            if (paramChangeCount > 1)
+            {
+                std::sort(paramChanges, paramChanges + paramChangeCount,
+                          [](const QueuedClapParamChange& a, const QueuedClapParamChange& b) noexcept {
+                              return a.offset < b.offset;
+                          });
+            }
+
+            const uint32_t totalFrames = frames;
+            uint32_t currentFrame = 0;
+            uint32_t paramIdx = 0;
+            uint32_t sliceCount = 0;
+            static constexpr const uint32_t kMaxSlices = 32;
+
+            while (currentFrame < totalFrames)
+            {
+                while (paramIdx < paramChangeCount && paramChanges[paramIdx].offset <= currentFrame)
+                {
+                    setParameterValueFromEvent(paramChanges[paramIdx].event);
+                    ++paramIdx;
+                }
+
+                uint32_t nextFrame = totalFrames;
+                if (sliceCount + 1 < kMaxSlices && paramIdx < paramChangeCount)
+                {
+                    nextFrame = paramChanges[paramIdx].offset;
+                    if (nextFrame <= currentFrame)
+                        nextFrame = currentFrame + 1;
+                    if (nextFrame > totalFrames)
+                        nextFrame = totalFrames;
+                }
+
+                const uint32_t sliceFrames = nextFrame - currentFrame;
+                if (sliceFrames == 0)
+                    break;
+
+                const float* slicedInputs[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+                float* slicedOutputs[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+               #if DISTRHO_PLUGIN_NUM_INPUTS != 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+                    slicedInputs[c] = (audioInputs[c] != nullptr) ? (audioInputs[c] + currentFrame) : nullptr;
+               #else
+                slicedInputs[0] = nullptr;
+               #endif
+
+               #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                    slicedOutputs[c] = (audioOutputs[c] != nullptr) ? (audioOutputs[c] + currentFrame) : nullptr;
+               #else
+                slicedOutputs[0] = nullptr;
+               #endif
+
+               #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                MidiEvent slicedMidiEvents[kMaxMidiEvents];
+                uint32_t sliceMidiCount = 0;
+
+                for (uint32_t m = 0; m < fMidiEventCount; ++m)
+                {
+                    if (fMidiEvents[m].frame >= currentFrame && fMidiEvents[m].frame < nextFrame)
+                    {
+                        slicedMidiEvents[sliceMidiCount] = fMidiEvents[m];
+                        slicedMidiEvents[sliceMidiCount].frame = fMidiEvents[m].frame - currentFrame;
+                        if (++sliceMidiCount == kMaxMidiEvents)
+                            break;
+                    }
+                }
+
+                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+               #else
+                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+               #endif
+
+                currentFrame = nextFrame;
+                ++sliceCount;
+            }
+
+            while (paramIdx < paramChangeCount)
+            {
+                setParameterValueFromEvent(paramChanges[paramIdx].event);
+                ++paramIdx;
+            }
 
             flushParameters(nullptr, process->out_events, frames - 1);
 

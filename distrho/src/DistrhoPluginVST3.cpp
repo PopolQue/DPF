@@ -40,6 +40,8 @@
 #include "../DistrhoPluginUtils.hpp"
 #include "../extra/ScopedPointer.hpp"
 
+#include <algorithm>
+
 #define DPF_VST3_MAX_BUFFER_SIZE 32768
 #define DPF_VST3_MAX_SAMPLE_RATE 384000
 #define DPF_VST3_MAX_LATENCY     DPF_VST3_MAX_SAMPLE_RATE * 10
@@ -1555,6 +1557,14 @@ public:
         }
       #endif
 
+        struct QueuedParamChange {
+            uint32_t offset;
+            uint32_t index;
+            double normalized;
+        };
+        QueuedParamChange paramChanges[128];
+        uint32_t paramChangeCount = 0;
+
         if (v3_param_changes** const inparamsptr = data->input_params)
         {
             int32_t offset;
@@ -1592,66 +1602,130 @@ public:
                 }
                #endif
 
-                if (v3_cpp_obj(queue)->get_point_count(queue) <= 0)
-                    continue;
-
-                // if there are any parameter changes at frame 0, handle them here
-                if (v3_cpp_obj(queue)->get_point(queue, 0, &offset, &normalized) != V3_OK)
-                    break;
-
-                if (offset != 0)
+                const int32_t pcount = v3_cpp_obj(queue)->get_point_count(queue);
+                if (pcount <= 0)
                     continue;
 
                 const uint32_t index = rindex - kVst3InternalParameterCount;
-                _setNormalizedPluginParameterValue(index, normalized);
+
+                for (int32_t j = 0; j < pcount; ++j)
+                {
+                    if (v3_cpp_obj(queue)->get_point(queue, j, &offset, &normalized) != V3_OK)
+                        break;
+
+                    if (offset < 0)
+                        offset = 0;
+                    else if (offset >= data->nframes)
+                        offset = (data->nframes > 0) ? (data->nframes - 1) : 0;
+
+                    if (paramChangeCount < 128)
+                    {
+                        paramChanges[paramChangeCount].offset = static_cast<uint32_t>(offset);
+                        paramChanges[paramChangeCount].index = index;
+                        paramChanges[paramChangeCount].normalized = normalized;
+                        ++paramChangeCount;
+                    }
+                    else
+                    {
+                        _setNormalizedPluginParameterValue(index, normalized);
+                    }
+                }
             }
         }
 
+        if (paramChangeCount > 1)
+        {
+            std::sort(paramChanges, paramChanges + paramChangeCount,
+                      [](const QueuedParamChange& a, const QueuedParamChange& b) noexcept {
+                          return a.offset < b.offset;
+                      });
+        }
+
        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
-        const uint32_t midiEventCount = inputEventList.convert(fMidiEvents);
-        fPlugin.run(inputs, outputs, data->nframes, fMidiEvents, midiEventCount);
-       #else
-        fPlugin.run(inputs, outputs, data->nframes);
+        const uint32_t totalMidiEvents = inputEventList.convert(fMidiEvents);
        #endif
+
+        const uint32_t totalFrames = data->nframes;
+        uint32_t currentFrame = 0;
+        uint32_t paramIdx = 0;
+        uint32_t sliceCount = 0;
+        static constexpr const uint32_t kMaxSlices = 32;
+
+        while (currentFrame < totalFrames)
+        {
+            // Apply all parameter changes timestamped at or before currentFrame
+            while (paramIdx < paramChangeCount && paramChanges[paramIdx].offset <= currentFrame)
+            {
+                _setNormalizedPluginParameterValue(paramChanges[paramIdx].index, paramChanges[paramIdx].normalized);
+                ++paramIdx;
+            }
+
+            // Find next event frame
+            uint32_t nextFrame = totalFrames;
+            if (sliceCount + 1 < kMaxSlices && paramIdx < paramChangeCount)
+            {
+                nextFrame = paramChanges[paramIdx].offset;
+                if (nextFrame <= currentFrame)
+                    nextFrame = currentFrame + 1;
+                if (nextFrame > totalFrames)
+                    nextFrame = totalFrames;
+            }
+
+            const uint32_t sliceFrames = nextFrame - currentFrame;
+            if (sliceFrames == 0)
+                break;
+
+            const float* slicedInputs[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+            float* slicedOutputs[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+           #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+            for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+                slicedInputs[c] = (inputs[c] != nullptr) ? (inputs[c] + currentFrame) : nullptr;
+           #else
+            slicedInputs[0] = nullptr;
+           #endif
+
+           #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+            for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                slicedOutputs[c] = (outputs[c] != nullptr) ? (outputs[c] + currentFrame) : nullptr;
+           #else
+            slicedOutputs[0] = nullptr;
+           #endif
+
+           #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+            MidiEvent slicedMidiEvents[kMaxMidiEvents];
+            uint32_t sliceMidiCount = 0;
+
+            for (uint32_t m = 0; m < totalMidiEvents; ++m)
+            {
+                if (fMidiEvents[m].frame >= currentFrame && fMidiEvents[m].frame < nextFrame)
+                {
+                    slicedMidiEvents[sliceMidiCount] = fMidiEvents[m];
+                    slicedMidiEvents[sliceMidiCount].frame = fMidiEvents[m].frame - currentFrame;
+                    if (++sliceMidiCount == kMaxMidiEvents)
+                        break;
+                }
+            }
+
+            fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+           #else
+            fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+           #endif
+
+            currentFrame = nextFrame;
+            ++sliceCount;
+        }
+
+        // Apply any remaining parameter changes past the slice limit
+        while (paramIdx < paramChangeCount)
+        {
+            _setNormalizedPluginParameterValue(paramChanges[paramIdx].index, paramChanges[paramIdx].normalized);
+            ++paramIdx;
+        }
 
        #if DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
         fHostEventOutputHandle = nullptr;
        #endif
-
-        // if there are any parameter changes after frame 0, set them here
-        if (v3_param_changes** const inparamsptr = data->input_params)
-        {
-            int32_t offset;
-            double normalized;
-
-            for (int32_t i = 0, count = v3_cpp_obj(inparamsptr)->get_param_count(inparamsptr); i < count; ++i)
-            {
-                v3_param_value_queue** const queue = v3_cpp_obj(inparamsptr)->get_param_data(inparamsptr, i);
-                DISTRHO_SAFE_ASSERT_BREAK(queue != nullptr);
-
-                const v3_param_id rindex = v3_cpp_obj(queue)->get_param_id(queue);
-                DISTRHO_SAFE_ASSERT_UINT_BREAK(rindex < fVst3ParameterCount, rindex);
-
-               #if DPF_VST3_HAS_INTERNAL_PARAMETERS
-                if (rindex < kVst3InternalParameterCount)
-                    continue;
-               #endif
-
-                const int32_t pcount = v3_cpp_obj(queue)->get_point_count(queue);
-
-                if (pcount <= 0)
-                    continue;
-
-                if (v3_cpp_obj(queue)->get_point(queue, pcount - 1, &offset, &normalized) != V3_OK)
-                    break;
-
-                if (offset == 0)
-                    continue;
-
-                const uint32_t index = rindex - kVst3InternalParameterCount;
-                _setNormalizedPluginParameterValue(index, normalized);
-            }
-        }
 
         updateParametersFromProcessing(data->output_params, data->nframes - 1);
         return V3_OK;

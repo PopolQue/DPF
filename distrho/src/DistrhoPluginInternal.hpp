@@ -18,6 +18,7 @@
 #define DISTRHO_PLUGIN_INTERNAL_HPP_INCLUDED
 
 #include "../DistrhoPlugin.hpp"
+#include "../extra/DataRingBuffer.hpp"
 
 #ifdef DISTRHO_PLUGIN_TARGET_VST3
 # include "DistrhoPluginVST.hpp"
@@ -184,6 +185,8 @@ struct Plugin::PrivateData {
     uint32_t bufferSize;
     double   sampleRate;
     char*    bundlePath;
+
+    DataRingBuffer telemetryBuffer;
 
     PrivateData() noexcept
         : canRequestParameterValueChanges(d_nextCanRequestParameterValueChanges),

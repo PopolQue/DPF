@@ -23,6 +23,8 @@
 
 START_NAMESPACE_DISTRHO
 
+class DataRingBuffer;
+
 /* ------------------------------------------------------------------------------------------------------------
  * DPF Plugin */
 
@@ -174,6 +176,23 @@ public:
     */
     bool updateStateValue(const char* key, const char* value) noexcept;
 #endif
+
+   /**
+      Post a real-time telemetry message to the UI side.
+      This function is wait-free, lock-free, and real-time safe to call from within run().
+      If the telemetry ring buffer is full, the message is dropped and false is returned.
+      @param tag Application-defined identifier for this telemetry packet.
+      @param data Pointer to the payload bytes.
+      @param size Size of the payload in bytes.
+      @return true if successfully queued, false if dropped due to buffer capacity.
+      @see UI::uiTelemetryReceived(uint32_t, const void*, uint32_t)
+    */
+    bool postTelemetry(uint32_t tag, const void* data, uint32_t size) noexcept;
+
+   /**
+      Get the internal telemetry ring buffer.
+    */
+    DataRingBuffer& getTelemetryBuffer() noexcept;
 
 protected:
    /* --------------------------------------------------------------------------------------------------------

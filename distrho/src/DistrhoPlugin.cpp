@@ -157,6 +157,16 @@ bool Plugin::updateStateValue(const char* const key, const char* const value) no
 }
 #endif
 
+bool Plugin::postTelemetry(const uint32_t tag, const void* const data, const uint32_t size) noexcept
+{
+    return pData->telemetryBuffer.write(tag, data, size);
+}
+
+DataRingBuffer& Plugin::getTelemetryBuffer() noexcept
+{
+    return pData->telemetryBuffer;
+}
+
 /* ------------------------------------------------------------------------------------------------------------
  * Init */
 

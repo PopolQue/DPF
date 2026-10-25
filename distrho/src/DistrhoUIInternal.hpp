@@ -18,6 +18,8 @@
 #define DISTRHO_UI_INTERNAL_HPP_INCLUDED
 
 #include "DistrhoUIPrivateData.hpp"
+#include "../extra/DataRingBuffer.hpp"
+#include "../DistrhoPlugin.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -57,6 +59,10 @@ public:
         uiData->sampleRate = sampleRate;
         uiData->bundlePath = bundlePath != nullptr ? strdup(bundlePath) : nullptr;
         uiData->dspPtr = dspPtr;
+       #if DISTRHO_PLUGIN_AND_UI_IN_SINGLE_OBJECT
+        if (dspPtr != nullptr)
+            uiData->dspTelemetryRingBuffer = &static_cast<Plugin*>(dspPtr)->getTelemetryBuffer();
+       #endif
 
         uiData->bgColor = bgColor;
         uiData->fgColor = fgColor;
@@ -186,6 +192,16 @@ public:
 
     // -------------------------------------------------------------------
 
+    void drainTelemetry()
+    {
+        if (uiData->dspTelemetryRingBuffer != nullptr)
+        {
+            uiData->dspTelemetryRingBuffer->drain([this](const uint32_t tag, const void* const data, const uint32_t size) {
+                ui->uiTelemetryReceived(tag, data, size);
+            });
+        }
+    }
+
    #if DISTRHO_UI_IS_STANDALONE
     void exec(DGL_NAMESPACE::IdleCallback* const cb)
     {
@@ -207,6 +223,7 @@ public:
             webViewIdle(uiData->webview);
        #endif
 
+        drainTelemetry();
         ui->uiIdle();
         uiData->app.repaintIfNeeeded();
     }
@@ -229,6 +246,7 @@ public:
             webViewIdle(uiData->webview);
        #endif
 
+        drainTelemetry();
         ui->uiIdle();
         uiData->app.repaintIfNeeeded();
         return ! uiData->app.isQuitting();
@@ -264,6 +282,7 @@ public:
             webViewIdle(uiData->webview);
        #endif
 
+        drainTelemetry();
         ui->uiIdle();
         uiData->app.repaintIfNeeeded();
     }

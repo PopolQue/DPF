@@ -556,6 +556,10 @@ uint32_t UI::uiClipboardDataOffer()
     return 0;
 }
 
+void UI::uiTelemetryReceived(uint32_t, const void*, uint32_t)
+{
+}
+
 void UI::uiFocus(bool, DGL_NAMESPACE::CrossingMode)
 {
 }

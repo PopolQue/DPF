@@ -22,7 +22,7 @@ endif
 # ---------------------------------------------------------------------------------------------------------------------
 
 MANUAL_TESTS  =
-UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units
+UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units TestPresetManager
 
 ifeq ($(HAVE_CAIRO),true)
 MANUAL_TESTS += Demo.cairo
@@ -42,6 +42,7 @@ UNIT_TESTS   += Window.cairo
 endif
 ifeq ($(HAVE_OPENGL),true)
 UNIT_TESTS   += Window.opengl
+UNIT_TESTS   += TestVectorWidgets
 endif
 ifeq ($(HAVE_STUB),true)
 UNIT_TESTS   += Window.stub
@@ -180,9 +181,13 @@ clean:
 	@echo "Linking NanoSubWidgets (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestVectorWidgets$(APP_EXT): ../build/tests/TestVectorWidgets.cpp.o ../build/libdgl-opengl.a
+	@echo "Linking TestVectorWidgets (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets
 
 -include $(ALL_OBJS:%.o=%.d)
 

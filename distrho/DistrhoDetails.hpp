@@ -1007,6 +1007,148 @@ struct NoteName {
 };
 
 /**
+   Universal MIDI Packet (UMP) for MIDI 2.0.
+   Holds up to 128 bits (4 x 32-bit words).
+ */
+struct Midi2Event {
+    uint32_t frame;       ///< Sample offset within the audio block
+    uint16_t port;        ///< Port index
+    uint8_t  wordCount;   ///< Number of valid 32-bit words (1 to 4)
+    uint8_t  messageType; ///< UMP Message Type (nibble 0 of word[0])
+    uint32_t words[4];    ///< UMP 32-bit packet words
+
+    Midi2Event() noexcept
+        : frame(0),
+          port(0),
+          wordCount(1),
+          messageType(0)
+    {
+        words[0] = 0;
+        words[1] = 0;
+        words[2] = 0;
+        words[3] = 0;
+    }
+
+    Midi2Event(const uint32_t f, const uint32_t w0) noexcept
+        : frame(f),
+          port(0),
+          wordCount(1),
+          messageType(static_cast<uint8_t>((w0 >> 28) & 0x0F))
+    {
+        words[0] = w0;
+        words[1] = 0;
+        words[2] = 0;
+        words[3] = 0;
+    }
+
+    Midi2Event(const uint32_t f, const uint32_t w0, const uint32_t w1) noexcept
+        : frame(f),
+          port(0),
+          wordCount(2),
+          messageType(static_cast<uint8_t>((w0 >> 28) & 0x0F))
+    {
+        words[0] = w0;
+        words[1] = w1;
+        words[2] = 0;
+        words[3] = 0;
+    }
+
+    Midi2Event(const uint32_t f, const uint16_t p, const uint32_t* const w, const uint8_t count) noexcept
+        : frame(f),
+          port(p),
+          wordCount(count > 0 && count <= 4 ? count : 1),
+          messageType(w != nullptr ? static_cast<uint8_t>((w[0] >> 28) & 0x0F) : 0)
+    {
+        words[0] = (w != nullptr && count > 0) ? w[0] : 0;
+        words[1] = (w != nullptr && count > 1) ? w[1] : 0;
+        words[2] = (w != nullptr && count > 2) ? w[2] : 0;
+        words[3] = (w != nullptr && count > 3) ? w[3] : 0;
+    }
+
+    Midi2Event(const uint32_t f, const uint32_t w0, const uint32_t w1, const uint32_t w2, const uint32_t w3, const uint16_t p = 0) noexcept
+        : frame(f),
+          port(p),
+          wordCount(4),
+          messageType(static_cast<uint8_t>((w0 >> 28) & 0x0F))
+    {
+        words[0] = w0;
+        words[1] = w1;
+        words[2] = w2;
+        words[3] = w3;
+    }
+};
+
+/**
+   Audio port configuration for dynamic channel / bus layouts.
+ */
+struct AudioPortConfig {
+    uint32_t id;
+    char     name[64];
+    uint32_t inputPortCount;
+    uint32_t outputPortCount;
+    char     mainInputPortType[32];   ///< "mono", "stereo", "surround", etc.
+    char     mainOutputPortType[32];
+    bool     hasMainInput;
+    bool     hasMainOutput;
+    char     sidechainInputPortType[32];
+    char     sidechainOutputPortType[32];
+    bool     hasSidechainInput;
+    bool     hasSidechainOutput;
+
+    AudioPortConfig() noexcept
+        : id(0),
+          inputPortCount(0),
+          outputPortCount(0),
+          hasMainInput(false),
+          hasMainOutput(false),
+          hasSidechainInput(false),
+          hasSidechainOutput(false)
+    {
+        name[0] = '\0';
+        mainInputPortType[0] = '\0';
+        mainOutputPortType[0] = '\0';
+        sidechainInputPortType[0] = '\0';
+        sidechainOutputPortType[0] = '\0';
+    }
+
+    AudioPortConfig(const uint32_t configId,
+                    const char* const configName,
+                    const uint32_t inCount,
+                    const uint32_t outCount,
+                    const char* const inType = "stereo",
+                    const char* const outType = "stereo") noexcept
+        : id(configId),
+          inputPortCount(inCount),
+          outputPortCount(outCount),
+          hasMainInput(inCount > 0),
+          hasMainOutput(outCount > 0),
+          hasSidechainInput(false),
+          hasSidechainOutput(false)
+    {
+        name[0] = '\0';
+        if (configName != nullptr)
+        {
+            std::strncpy(name, configName, sizeof(name) - 1);
+            name[sizeof(name) - 1] = '\0';
+        }
+        mainInputPortType[0] = '\0';
+        if (inType != nullptr)
+        {
+            std::strncpy(mainInputPortType, inType, sizeof(mainInputPortType) - 1);
+            mainInputPortType[sizeof(mainInputPortType) - 1] = '\0';
+        }
+        mainOutputPortType[0] = '\0';
+        if (outType != nullptr)
+        {
+            std::strncpy(mainOutputPortType, outType, sizeof(mainOutputPortType) - 1);
+            mainOutputPortType[sizeof(mainOutputPortType) - 1] = '\0';
+        }
+        sidechainInputPortType[0] = '\0';
+        sidechainOutputPortType[0] = '\0';
+    }
+};
+
+/**
    Time position.@n
    The @a playing and @a frame values are always valid.@n
    BBT values are only valid when @a bbt.valid is true.

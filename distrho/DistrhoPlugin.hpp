@@ -216,6 +216,18 @@ public:
     */
     const NoteExpressionEvent& getNoteExpressionEvent(uint32_t index) const noexcept;
 
+   /**
+      Get the number of MIDI 2.0 (UMP) events received in the current process block.
+      @note Only valid during run() / runDouble().
+    */
+    uint32_t getMidi2EventCount() const noexcept;
+
+   /**
+      Get a MIDI 2.0 (UMP) event by index.
+      @note Only valid during run() / runDouble().
+    */
+    const Midi2Event& getMidi2Event(uint32_t index) const noexcept;
+
 protected:
    /* --------------------------------------------------------------------------------------------------------
     * Information */
@@ -347,6 +359,27 @@ protected:
       @return True on success, false if index is invalid.
     */
     virtual bool getNoteName(uint32_t index, NoteName& noteName) const;
+
+   /**
+      Get the number of available dynamic audio port configurations (e.g. Mono, Stereo, 5.1).
+      Override this if your plugin supports multiple dynamic bus configurations.
+    */
+    virtual uint32_t getAudioPortConfigCount() const;
+
+   /**
+      Get audio port configuration by index.
+      @param index The configuration index [0 .. getAudioPortConfigCount() - 1].
+      @param config Output structure to fill with configuration details.
+      @return True on success, false if index is invalid.
+    */
+    virtual bool getAudioPortConfig(uint32_t index, AudioPortConfig& config) const;
+
+   /**
+      Select an audio port configuration by ID.
+      @param configId The configuration ID selected by host.
+      @return True if successfully applied, false otherwise.
+    */
+    virtual bool selectAudioPortConfig(uint32_t configId);
 
 #if DISTRHO_PLUGIN_WANT_PROGRAMS
    /**

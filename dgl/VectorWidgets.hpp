@@ -24,5 +24,6 @@
 #include "widgets/VectorComboBox.hpp"
 #include "widgets/VectorScope.hpp"
 #include "widgets/VectorTabGroup.hpp"
+#include "widgets/VectorSpectrum.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

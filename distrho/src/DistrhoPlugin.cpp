@@ -189,6 +189,18 @@ const NoteExpressionEvent& Plugin::getNoteExpressionEvent(const uint32_t index) 
     return pData->noteExpressionEvents[index];
 }
 
+uint32_t Plugin::getMidi2EventCount() const noexcept
+{
+    return static_cast<uint32_t>(pData->midi2Events.size());
+}
+
+const Midi2Event& Plugin::getMidi2Event(const uint32_t index) const noexcept
+{
+    static const Midi2Event sFallback{};
+    DISTRHO_SAFE_ASSERT_RETURN(index < pData->midi2Events.size(), sFallback);
+    return pData->midi2Events[index];
+}
+
 /* ------------------------------------------------------------------------------------------------------------
  * Init */
 
@@ -223,6 +235,21 @@ uint32_t Plugin::getNoteNameCount() const
 }
 
 bool Plugin::getNoteName(const uint32_t, NoteName&) const
+{
+    return false;
+}
+
+uint32_t Plugin::getAudioPortConfigCount() const
+{
+    return 0;
+}
+
+bool Plugin::getAudioPortConfig(const uint32_t, AudioPortConfig&) const
+{
+    return false;
+}
+
+bool Plugin::selectAudioPortConfig(const uint32_t)
 {
     return false;
 }

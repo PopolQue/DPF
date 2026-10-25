@@ -192,6 +192,7 @@ struct Plugin::PrivateData {
     uint32_t trackColor;
 
     std::vector<NoteExpressionEvent> noteExpressionEvents;
+    std::vector<Midi2Event> midi2Events;
 
     PrivateData() noexcept
         : canRequestParameterValueChanges(d_nextCanRequestParameterValueChanges),
@@ -977,6 +978,36 @@ public:
     {
         DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, false);
         return fPlugin->getNoteName(index, noteName);
+    }
+
+    void clearMidi2Events() noexcept
+    {
+        if (fData != nullptr)
+            fData->midi2Events.clear();
+    }
+
+    void addMidi2Event(const Midi2Event& event)
+    {
+        if (fData != nullptr)
+            fData->midi2Events.push_back(event);
+    }
+
+    uint32_t getAudioPortConfigCount() const
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, 0);
+        return fPlugin->getAudioPortConfigCount();
+    }
+
+    bool getAudioPortConfig(const uint32_t index, AudioPortConfig& config) const
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, false);
+        return fPlugin->getAudioPortConfig(index, config);
+    }
+
+    bool selectAudioPortConfig(const uint32_t configId)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, false);
+        return fPlugin->selectAudioPortConfig(configId);
     }
 
     // -------------------------------------------------------------------

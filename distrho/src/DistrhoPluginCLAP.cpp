@@ -52,6 +52,7 @@
 #include "clap/plugin-factory.h"
 #include "clap/color.h"
 #include "clap/ext/audio-ports.h"
+#include "clap/ext/audio-ports-config.h"
 #include "clap/ext/latency.h"
 #include "clap/ext/gui.h"
 #include "clap/ext/note-ports.h"
@@ -891,6 +892,39 @@ public:
         return true;
     }
 
+    uint32_t getAudioPortConfigCount() const noexcept
+    {
+        return fPlugin.getAudioPortConfigCount();
+    }
+
+    bool getAudioPortConfig(const uint32_t index, clap_audio_ports_config_t* const config) const noexcept
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(config != nullptr, false);
+        AudioPortConfig dConfig{};
+        if (!fPlugin.getAudioPortConfig(index, dConfig))
+            return false;
+
+        config->id = dConfig.id;
+        std::strncpy(config->name, dConfig.name, CLAP_NAME_SIZE - 1);
+        config->name[CLAP_NAME_SIZE - 1] = '\0';
+        config->input_port_count = dConfig.inputPortCount;
+        config->output_port_count = dConfig.outputPortCount;
+        config->has_main_input = dConfig.hasMainInput;
+        config->has_main_output = dConfig.hasMainOutput;
+        config->main_input_port_type = dConfig.hasMainInput ? (std::strcmp(dConfig.mainInputPortType, "mono") == 0 ? CLAP_PORT_MONO : CLAP_PORT_STEREO) : nullptr;
+        config->main_output_port_type = dConfig.hasMainOutput ? (std::strcmp(dConfig.mainOutputPortType, "mono") == 0 ? CLAP_PORT_MONO : CLAP_PORT_STEREO) : nullptr;
+        config->has_sidechain_input = dConfig.hasSidechainInput;
+        config->has_sidechain_output = dConfig.hasSidechainOutput;
+        config->sidechain_input_port_type = dConfig.hasSidechainInput ? (std::strcmp(dConfig.sidechainInputPortType, "mono") == 0 ? CLAP_PORT_MONO : CLAP_PORT_STEREO) : nullptr;
+        config->sidechain_output_port_type = dConfig.hasSidechainOutput ? (std::strcmp(dConfig.sidechainOutputPortType, "mono") == 0 ? CLAP_PORT_MONO : CLAP_PORT_STEREO) : nullptr;
+        return true;
+    }
+
+    bool selectAudioPortConfig(const uint32_t configId)
+    {
+        return fPlugin.selectAudioPortConfig(configId);
+    }
+
     template <class T>
     const T* getHostExtension(const char* const extensionId) const
     {
@@ -950,6 +984,7 @@ public:
     bool process(const clap_process_t* const process)
     {
         fPlugin.clearNoteExpressionEvents();
+        fPlugin.clearMidi2Events();
        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
         fMidiEventCount = 0;
        #endif
@@ -1176,7 +1211,17 @@ public:
                        #endif
                         break;
                     case CLAP_EVENT_MIDI_SYSEX:
+                        break;
                     case CLAP_EVENT_MIDI2:
+                        DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_midi2_t),
+                                                        event->size, sizeof(clap_event_midi2_t));
+                        {
+                            const clap_event_midi2_t* const m2 =
+                                reinterpret_cast<const clap_event_midi2_t*>(event);
+                            const uint32_t frame = (event->time < process->frames_count) ? event->time : (process->frames_count > 0 ? process->frames_count - 1 : 0);
+                            const Midi2Event ev(frame, m2->data[0], m2->data[1], m2->data[2], m2->data[3], m2->port_index);
+                            fPlugin.addMidi2Event(ev);
+                        }
                         break;
                     }
                 }
@@ -2923,10 +2968,10 @@ static bool CLAP_ABI clap_plugin_note_ports_get(const clap_plugin_t*, uint32_t,
       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
         info->id = 0;
        #if DISTRHO_PLUGIN_WANT_MIDI_AS_MPE
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI2;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI_MPE;
        #else
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI2;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
        #endif
         std::strcpy(info->name, "Event/MIDI Input");
@@ -2938,10 +2983,10 @@ static bool CLAP_ABI clap_plugin_note_ports_get(const clap_plugin_t*, uint32_t,
       #if DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
         info->id = 0;
        #if DISTRHO_PLUGIN_WANT_MIDI_AS_MPE
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI2;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI_MPE;
        #else
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI2;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
        #endif
         std::strcpy(info->name, "Event/MIDI Output");
@@ -3228,8 +3273,45 @@ static const clap_plugin_note_name_t clap_plugin_note_name = {
     clap_plugin_note_name_get
 };
 
+// --------------------------------------------------------------------------------------------------------------------
+// audio ports config
+
+static uint32_t CLAP_ABI clap_plugin_audio_ports_config_count(const clap_plugin_t* const plugin)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->getAudioPortConfigCount();
+}
+
+static bool CLAP_ABI clap_plugin_audio_ports_config_get(const clap_plugin_t* const plugin,
+                                                        const uint32_t index,
+                                                        clap_audio_ports_config_t* const config)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->getAudioPortConfig(index, config);
+}
+
+static bool CLAP_ABI clap_plugin_audio_ports_config_select(const clap_plugin_t* const plugin,
+                                                           const clap_id config_id)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->selectAudioPortConfig(config_id);
+}
+
+static const clap_plugin_audio_ports_config_t clap_plugin_audio_ports_config = {
+    clap_plugin_audio_ports_config_count,
+    clap_plugin_audio_ports_config_get,
+    clap_plugin_audio_ports_config_select
+};
+
 static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t* const plugin, const char* const id)
 {
+    if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG) == 0 ||
+        std::strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG_COMPAT) == 0)
+    {
+        PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+        if (instance->getAudioPortConfigCount() > 0)
+            return &clap_plugin_audio_ports_config;
+    }
     if (std::strcmp(id, CLAP_EXT_PRESET_LOAD) == 0 ||
         std::strcmp(id, CLAP_EXT_PRESET_LOAD_COMPAT) == 0)
         return &clap_plugin_preset_load;

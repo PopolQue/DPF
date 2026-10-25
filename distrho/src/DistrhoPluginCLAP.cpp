@@ -784,6 +784,7 @@ public:
           fHost(host),
           fOutputEvents(nullptr),
           fResetParameterIndex(UINT32_MAX),
+          fScratchBuffer32(nullptr),
          #if DISTRHO_PLUGIN_NUM_INPUTS+DISTRHO_PLUGIN_NUM_OUTPUTS != 0
           fUsingCV(false),
          #endif
@@ -835,6 +836,15 @@ public:
         fillInRemoteControlPages();
     }
 
+    ~PluginCLAP()
+    {
+        if (fScratchBuffer32 != nullptr)
+        {
+            delete[] fScratchBuffer32;
+            fScratchBuffer32 = nullptr;
+        }
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // core
 
@@ -862,6 +872,11 @@ public:
         fPlugin.setBufferSize(maxFramesCount, true);
         fPlugin.activate();
         trackInfoChanged();
+
+       #if DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+        delete[] fScratchBuffer32;
+        fScratchBuffer32 = new float[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * (maxFramesCount > 0 ? maxFramesCount : 512)]();
+       #endif
     }
 
     void deactivate()
@@ -1108,9 +1123,12 @@ public:
 
         if (const uint32_t frames = process->frames_count)
         {
+            const bool is64Bit = (process->audio_outputs_count > 0 && process->audio_outputs[0].data64 != nullptr) ||
+                                 (process->audio_inputs_count > 0 && process->audio_inputs[0].data64 != nullptr);
+
            #if DISTRHO_PLUGIN_NUM_INPUTS != 0
             const float** const audioInputs = fAudioInputs;
-
+            const double* audioInputs64[DISTRHO_PLUGIN_NUM_INPUTS];
             uint32_t in=0;
             for (uint32_t i=0; i<process->audio_inputs_count; ++i)
             {
@@ -1118,13 +1136,23 @@ public:
                 DISTRHO_SAFE_ASSERT_CONTINUE(inputs.channel_count != 0);
 
                 for (uint32_t j=0; j<inputs.channel_count; ++j, ++in)
-                    audioInputs[in] = const_cast<const float*>(inputs.data32[j]);
+                {
+                    if (is64Bit)
+                        audioInputs64[in] = const_cast<const double*>(inputs.data64[j]);
+                    else
+                        audioInputs[in] = const_cast<const float*>(inputs.data32[j]);
+                }
             }
 
             if (fUsingCV)
             {
                 for (; in<DISTRHO_PLUGIN_NUM_INPUTS; ++in)
-                    audioInputs[in] = nullptr;
+                {
+                    if (is64Bit)
+                        audioInputs64[in] = nullptr;
+                    else
+                        audioInputs[in] = nullptr;
+                }
             }
             else
             {
@@ -1134,11 +1162,13 @@ public:
            #else
             constexpr const float** const audioInputs = nullptr;
             (void)audioInputs;
+            constexpr const double** const audioInputs64 = nullptr;
+            (void)audioInputs64;
            #endif
 
            #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
             float** const audioOutputs = fAudioOutputs;
-
+            double* audioOutputs64[DISTRHO_PLUGIN_NUM_OUTPUTS];
             uint32_t out=0;
             for (uint32_t i=0; i<process->audio_outputs_count; ++i)
             {
@@ -1146,13 +1176,23 @@ public:
                 DISTRHO_SAFE_ASSERT_CONTINUE(outputs.channel_count != 0);
 
                 for (uint32_t j=0; j<outputs.channel_count; ++j, ++out)
-                    audioOutputs[out] = outputs.data32[j];
+                {
+                    if (is64Bit)
+                        audioOutputs64[out] = outputs.data64[j];
+                    else
+                        audioOutputs[out] = outputs.data32[j];
+                }
             }
 
             if (fUsingCV)
             {
                 for (; out<DISTRHO_PLUGIN_NUM_OUTPUTS; ++out)
-                    audioOutputs[out] = nullptr;
+                {
+                    if (is64Bit)
+                        audioOutputs64[out] = nullptr;
+                    else
+                        audioOutputs[out] = nullptr;
+                }
             }
             else
             {
@@ -1162,6 +1202,33 @@ public:
            #else
             constexpr float** const audioOutputs = nullptr;
             (void)audioOutputs;
+            constexpr double** const audioOutputs64 = nullptr;
+            (void)audioOutputs64;
+           #endif
+
+           #if !DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+            if (is64Bit)
+            {
+               #if DISTRHO_PLUGIN_NUM_INPUTS != 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+                {
+                    fAudioInputs[c] = fScratchBuffer32 + c * frames;
+                    if (audioInputs64[c] != nullptr)
+                    {
+                        for (uint32_t s = 0; s < frames; ++s)
+                            const_cast<float*>(fAudioInputs[c])[s] = static_cast<float>(audioInputs64[c][s]);
+                    }
+                    else
+                    {
+                        std::memset(const_cast<float*>(fAudioInputs[c]), 0, sizeof(float) * frames);
+                    }
+                }
+               #endif
+               #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                    fAudioOutputs[c] = fScratchBuffer32 + (DISTRHO_PLUGIN_NUM_INPUTS + c) * frames;
+               #endif
+            }
            #endif
 
             fOutputEvents = process->out_events;
@@ -1233,10 +1300,48 @@ public:
                             break;
                     }
                 }
+               #endif
 
-                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+               #if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+                if (is64Bit)
+                {
+                    const double* slicedInputs64[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+                    double* slicedOutputs64[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+                   #if DISTRHO_PLUGIN_NUM_INPUTS != 0
+                    for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+                        slicedInputs64[c] = (audioInputs64[c] != nullptr) ? (audioInputs64[c] + currentFrame) : nullptr;
+                   #else
+                    slicedInputs64[0] = nullptr;
+                   #endif
+
+                   #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
+                    for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                        slicedOutputs64[c] = (audioOutputs64[c] != nullptr) ? (audioOutputs64[c] + currentFrame) : nullptr;
+                   #else
+                    slicedOutputs64[0] = nullptr;
+                   #endif
+
+                   #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                    fPlugin.runDouble(slicedInputs64, slicedOutputs64, sliceFrames, slicedMidiEvents, sliceMidiCount);
+                   #else
+                    fPlugin.runDouble(slicedInputs64, slicedOutputs64, sliceFrames);
+                   #endif
+                }
+                else
+                {
+                   #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                    fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+                   #else
+                    fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+                   #endif
+                }
                #else
+               # if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+               # else
                 fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+               # endif
                #endif
 
                 currentFrame = nextFrame;
@@ -1248,6 +1353,22 @@ public:
                 setParameterValueFromEvent(paramChanges[paramIdx].event);
                 ++paramIdx;
             }
+
+           #if !DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+            if (is64Bit)
+            {
+               #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                {
+                    if (audioOutputs64[c] != nullptr && fAudioOutputs[c] != nullptr)
+                    {
+                        for (uint32_t s = 0; s < frames; ++s)
+                            audioOutputs64[c][s] = static_cast<double>(fAudioOutputs[c][s]);
+                    }
+                }
+               #endif
+            }
+           #endif
 
             flushParameters(nullptr, process->out_events, frames - 1);
 
@@ -1509,7 +1630,10 @@ public:
         info->id = busInfo.groupId;
         d_strncpy(info->name, busInfo.name, CLAP_NAME_SIZE);
 
-        info->flags = busInfo.isMain ? CLAP_AUDIO_PORT_IS_MAIN : 0x0;
+        info->flags = (busInfo.isMain ? CLAP_AUDIO_PORT_IS_MAIN : 0x0) | CLAP_AUDIO_PORT_SUPPORTS_64BITS;
+       #if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+        info->flags |= CLAP_AUDIO_PORT_PREFERS_64BITS;
+       #endif
         info->channel_count = busInfo.numChannels;
 
         switch (busInfo.groupId)
@@ -1965,6 +2089,7 @@ private:
    #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
     float* fAudioOutputs[DISTRHO_PLUGIN_NUM_OUTPUTS];
    #endif
+    float* fScratchBuffer32;
    #if DISTRHO_PLUGIN_NUM_INPUTS+DISTRHO_PLUGIN_NUM_OUTPUTS != 0
     bool fUsingCV;
    #endif

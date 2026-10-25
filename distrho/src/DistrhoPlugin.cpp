@@ -268,6 +268,76 @@ void Plugin::bufferSizeChanged(uint32_t) {}
 void Plugin::sampleRateChanged(double) {}
 void Plugin::ioChanged(uint16_t, uint16_t) {}
 
+#if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+# if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+void Plugin::runDouble(const double** inputs, double** outputs, uint32_t frames,
+                       const MidiEvent* midiEvents, uint32_t midiEventCount)
+# else
+void Plugin::runDouble(const double** inputs, double** outputs, uint32_t frames)
+# endif
+{
+   #if DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+    static constexpr const uint32_t kStackFrames = 512;
+    float stackScratch[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * kStackFrames];
+    float* const heapScratch = frames > kStackFrames ? new float[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * frames] : nullptr;
+    float* const scratch = heapScratch != nullptr ? heapScratch : stackScratch;
+
+    const float* in32[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+    float* out32[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+   #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+    for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_INPUTS; ++i)
+    {
+        in32[i] = scratch + i * frames;
+        if (inputs != nullptr && inputs[i] != nullptr)
+        {
+            for (uint32_t s = 0; s < frames; ++s)
+                const_cast<float*>(in32[i])[s] = static_cast<float>(inputs[i][s]);
+        }
+        else
+        {
+            std::memset(const_cast<float*>(in32[i]), 0, sizeof(float) * frames);
+        }
+    }
+   #else
+    in32[0] = nullptr;
+   #endif
+
+   #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+    for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_OUTPUTS; ++i)
+        out32[i] = scratch + (DISTRHO_PLUGIN_NUM_INPUTS + i) * frames;
+   #else
+    out32[0] = nullptr;
+   #endif
+
+   #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+    run(in32, out32, frames, midiEvents, midiEventCount);
+   #else
+    run(in32, out32, frames);
+   #endif
+
+   #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+    for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_OUTPUTS; ++i)
+    {
+        if (outputs != nullptr && outputs[i] != nullptr)
+        {
+            for (uint32_t s = 0; s < frames; ++s)
+                outputs[i][s] = static_cast<double>(out32[i][s]);
+        }
+    }
+   #endif
+
+    delete[] heapScratch;
+   #else
+   # if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+    run(nullptr, nullptr, frames, midiEvents, midiEventCount);
+   # else
+    run(nullptr, nullptr, frames);
+   # endif
+   #endif
+}
+#endif
+
 // -----------------------------------------------------------------------------------------------------------
 
 END_NAMESPACE_DISTRHO

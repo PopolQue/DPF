@@ -938,6 +938,8 @@ public:
                    #else
                     return -1;
                    #endif
+                if (std::strcmp(canDo, "processDoubleReplacing") == 0)
+                    return 1;
                 if (std::strcmp(canDo, "offline") == 0)
                     return -1;
             }
@@ -1097,6 +1099,173 @@ public:
       #else
         fPlugin.run(inputs, outputs, sampleFrames);
       #endif
+
+        updateParameterOutputsAndTriggers();
+    }
+
+    void vst_processDoubleReplacing(const double** const inputs, double** const outputs, const int32_t sampleFrames)
+    {
+        if (! fPlugin.isActive())
+        {
+            // host has not activated the plugin yet, nasty!
+            vst_dispatcher(VST_EFFECT_OPCODE_SUSPEND, 0, 1, nullptr, 0.0f);
+        }
+
+        if (sampleFrames <= 0)
+        {
+            updateParameterOutputsAndTriggers();
+            return;
+        }
+
+       #if DISTRHO_PLUGIN_WANT_TIMEPOS
+        static constexpr const int kWantVstTimeFlags = 0x2602;
+
+        if (const VstTimeInfo* const vstTimeInfo = (const VstTimeInfo*)hostCallback(VST_HOST_OPCODE_07, 0, kWantVstTimeFlags))
+        {
+            fTimePosition.frame   = vstTimeInfo->samplePos;
+            fTimePosition.playing = vstTimeInfo->flags & 0x2;
+
+            // ticksPerBeat is not possible with VST2
+            fTimePosition.bbt.ticksPerBeat = 1920.0;
+
+            if (vstTimeInfo->flags & 0x400)
+                fTimePosition.bbt.beatsPerMinute = vstTimeInfo->tempo;
+            else
+                fTimePosition.bbt.beatsPerMinute = 120.0;
+
+            if ((vstTimeInfo->flags & 0x2200) == 0x2200)
+            {
+                const double ppqPos    = std::abs(vstTimeInfo->ppqPos);
+                const int    ppqPerBar = vstTimeInfo->timeSigNumerator * 4 / vstTimeInfo->timeSigDenominator;
+                const double barBeats  = (std::fmod(ppqPos, ppqPerBar) / ppqPerBar) * vstTimeInfo->timeSigNumerator;
+                const double rest      =  std::fmod(barBeats, 1.0);
+
+                fTimePosition.bbt.valid       = true;
+                fTimePosition.bbt.bar         = static_cast<int32_t>(ppqPos) / ppqPerBar + 1;
+                fTimePosition.bbt.beat        = static_cast<int32_t>(barBeats - rest + 0.5) + 1;
+                fTimePosition.bbt.tick        = rest * fTimePosition.bbt.ticksPerBeat;
+                fTimePosition.bbt.beatsPerBar = vstTimeInfo->timeSigNumerator;
+                fTimePosition.bbt.beatType    = vstTimeInfo->timeSigDenominator;
+
+                if (vstTimeInfo->ppqPos < 0.0)
+                {
+                    --fTimePosition.bbt.bar;
+                    fTimePosition.bbt.beat = vstTimeInfo->timeSigNumerator - fTimePosition.bbt.beat + 1;
+                    fTimePosition.bbt.tick = fTimePosition.bbt.ticksPerBeat - fTimePosition.bbt.tick - 1;
+                }
+            }
+            else
+            {
+                fTimePosition.bbt.valid       = false;
+                fTimePosition.bbt.bar         = 1;
+                fTimePosition.bbt.beat        = 1;
+                fTimePosition.bbt.tick        = 0.0;
+                fTimePosition.bbt.beatsPerBar = 4.0f;
+                fTimePosition.bbt.beatType    = 4.0f;
+            }
+
+            fTimePosition.bbt.barStartTick = fTimePosition.bbt.ticksPerBeat*
+                                             fTimePosition.bbt.beatsPerBar*
+                                             (fTimePosition.bbt.bar-1);
+
+            fPlugin.setTimePosition(fTimePosition);
+        }
+       #endif
+
+       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+       # if DISTRHO_PLUGIN_HAS_UI
+        if (fMidiEventCount != kMaxMidiEvents && fNotesRingBuffer.isDataAvailableForReading())
+        {
+            uint8_t midiData[3];
+            const uint32_t frame = fMidiEventCount != 0 ? fMidiEvents[fMidiEventCount - 1].frame : 0;
+
+            while (fNotesRingBuffer.isDataAvailableForReading())
+            {
+                if (! fNotesRingBuffer.readCustomData(midiData, 3))
+                    break;
+
+                MidiEvent& midiEvent(fMidiEvents[fMidiEventCount++]);
+                midiEvent.frame = frame;
+                midiEvent.size  = 3;
+                std::memcpy(midiEvent.data, midiData, 3);
+
+                if (fMidiEventCount == kMaxMidiEvents)
+                    break;
+            }
+        }
+       # endif
+       #endif
+
+       #if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+       # if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+        fPlugin.runDouble(inputs, outputs, sampleFrames, fMidiEvents, fMidiEventCount);
+        fMidiEventCount = 0;
+       # else
+        fPlugin.runDouble(inputs, outputs, sampleFrames);
+       # endif
+       #else
+       # if DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+        static constexpr const int32_t kStackFrames = 512;
+        float stackScratch[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * kStackFrames];
+        float* const heapScratch = sampleFrames > kStackFrames ? new float[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * sampleFrames] : nullptr;
+        float* const scratch = heapScratch != nullptr ? heapScratch : stackScratch;
+
+        const float* in32[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+        float* out32[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+       #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+        for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_INPUTS; ++i)
+        {
+            in32[i] = scratch + i * sampleFrames;
+            if (inputs != nullptr && inputs[i] != nullptr)
+            {
+                for (int32_t s = 0; s < sampleFrames; ++s)
+                    const_cast<float*>(in32[i])[s] = static_cast<float>(inputs[i][s]);
+            }
+            else
+            {
+                std::memset(const_cast<float*>(in32[i]), 0, sizeof(float) * sampleFrames);
+            }
+        }
+       #else
+        in32[0] = nullptr;
+       #endif
+
+       #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+        for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_OUTPUTS; ++i)
+            out32[i] = scratch + (DISTRHO_PLUGIN_NUM_INPUTS + i) * sampleFrames;
+       #else
+        out32[0] = nullptr;
+       #endif
+
+       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+        fPlugin.run(in32, out32, sampleFrames, fMidiEvents, fMidiEventCount);
+        fMidiEventCount = 0;
+       #else
+        fPlugin.run(in32, out32, sampleFrames);
+       #endif
+
+       #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+        for (uint32_t i = 0; i < DISTRHO_PLUGIN_NUM_OUTPUTS; ++i)
+        {
+            if (outputs != nullptr && outputs[i] != nullptr)
+            {
+                for (int32_t s = 0; s < sampleFrames; ++s)
+                    outputs[i][s] = static_cast<double>(out32[i][s]);
+            }
+        }
+       #endif
+
+        delete[] heapScratch;
+       # else
+       #  if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+        fPlugin.run(nullptr, nullptr, sampleFrames, fMidiEvents, fMidiEventCount);
+        fMidiEventCount = 0;
+       #  else
+        fPlugin.run(nullptr, nullptr, sampleFrames);
+       #  endif
+       # endif
+       #endif
 
         updateParameterOutputsAndTriggers();
     }
@@ -1581,6 +1750,15 @@ static void VST_FUNCTION_INTERFACE vst_processReplacingCallback(vst_effect* cons
         pluginPtr->vst_processReplacing(const_cast<const float**>(inputs), outputs, sampleFrames);
 }
 
+static void VST_FUNCTION_INTERFACE vst_processDoubleReplacingCallback(vst_effect* const effect,
+                                                                      const double* const* const inputs,
+                                                                      double** const outputs,
+                                                                      const int32_t sampleFrames)
+{
+    if (PluginVst* const pluginPtr = getEffectPlugin(effect))
+        pluginPtr->vst_processDoubleReplacing(const_cast<const double**>(inputs), outputs, sampleFrames);
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 
 END_NAMESPACE_DISTRHO
@@ -1682,6 +1860,7 @@ const vst_effect* VSTPluginMain(const vst_host_callback audioMaster)
 
     // plugin flags
     effect->flags |= 1 << 4; // uses process_float
+    effect->flags |= 1 << 12; // uses process_double
    #if DISTRHO_PLUGIN_IS_SYNTH
     effect->flags |= 1 << 8;
    #endif
@@ -1693,11 +1872,12 @@ const vst_effect* VSTPluginMain(const vst_host_callback audioMaster)
    #endif
 
     // static calls
-    effect->control       = vst_dispatcherCallback;
-    effect->process       = vst_processCallback;
-    effect->get_parameter = vst_getParameterCallback;
-    effect->set_parameter = vst_setParameterCallback;
-    effect->process_float = vst_processReplacingCallback;
+    effect->control        = vst_dispatcherCallback;
+    effect->process        = vst_processCallback;
+    effect->get_parameter  = vst_getParameterCallback;
+    effect->set_parameter  = vst_setParameterCallback;
+    effect->process_float  = vst_processReplacingCallback;
+    effect->process_double = vst_processDoubleReplacingCallback;
 
     // special values
     effect->valid       = 101;

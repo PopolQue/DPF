@@ -418,6 +418,25 @@ protected:
     virtual void run(const float** inputs, float** outputs, uint32_t frames) = 0;
 #endif
 
+#if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+# if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+   /**
+      64-bit double-precision run/process function for plugins with MIDI input.
+      @note Optional override. If not overridden, the framework automatically converts
+            between double and float buffers and calls the 32-bit run() function.
+    */
+    virtual void runDouble(const double** inputs, double** outputs, uint32_t frames,
+                           const MidiEvent* midiEvents, uint32_t midiEventCount);
+# else
+   /**
+      64-bit double-precision run/process function for plugins without MIDI input.
+      @note Optional override. If not overridden, the framework automatically converts
+            between double and float buffers and calls the 32-bit run() function.
+    */
+    virtual void runDouble(const double** inputs, double** outputs, uint32_t frames);
+# endif
+#endif
+
    /* --------------------------------------------------------------------------------------------------------
     * Callbacks (optional) */
 

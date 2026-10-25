@@ -599,6 +599,9 @@ public:
           fVst3ParameterCount(fParameterCount + kVst3InternalParameterCount),
           fCachedParameterValues(nullptr),
           fDummyAudioBuffer(nullptr),
+          fDummyAudioBuffer64(nullptr),
+          fScratchBuffer32(nullptr),
+          fSymbolicSampleSize(V3_SAMPLE_32),
           fParameterValuesChangedDuringProcessing(nullptr)
        #if DPF_VST3_USES_SEPARATE_CONTROLLER
         , fIsComponent(isComponent)
@@ -684,6 +687,18 @@ public:
         {
             delete[] fDummyAudioBuffer;
             fDummyAudioBuffer = nullptr;
+        }
+
+        if (fDummyAudioBuffer64 != nullptr)
+        {
+            delete[] fDummyAudioBuffer64;
+            fDummyAudioBuffer64 = nullptr;
+        }
+
+        if (fScratchBuffer32 != nullptr)
+        {
+            delete[] fScratchBuffer32;
+            fScratchBuffer32 = nullptr;
         }
 
         if (fParameterValuesChangedDuringProcessing != nullptr)
@@ -1352,7 +1367,8 @@ public:
 
     v3_result setupProcessing(v3_process_setup* const setup)
     {
-        DISTRHO_SAFE_ASSERT_RETURN(setup->symbolic_sample_size == V3_SAMPLE_32, V3_INVALID_ARG);
+        DISTRHO_SAFE_ASSERT_RETURN(setup->symbolic_sample_size == V3_SAMPLE_32 ||
+                                   setup->symbolic_sample_size == V3_SAMPLE_64, V3_INVALID_ARG);
 
         const bool active = fPlugin.isActive();
         fPlugin.deactivateIfNeeded();
@@ -1361,6 +1377,7 @@ public:
 
         fPlugin.setSampleRate(setup->sample_rate, true);
         fPlugin.setBufferSize(setup->max_block_size, true);
+        fSymbolicSampleSize = setup->symbolic_sample_size;
 
       #if DPF_VST3_USES_SEPARATE_CONTROLLER
         fCachedParameterValues[kVst3InternalParameterBufferSize] = setup->max_block_size;
@@ -1378,6 +1395,14 @@ public:
 
         delete[] fDummyAudioBuffer;
         fDummyAudioBuffer = new float[setup->max_block_size];
+
+        delete[] fDummyAudioBuffer64;
+        fDummyAudioBuffer64 = new double[setup->max_block_size];
+
+       #if DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+        delete[] fScratchBuffer32;
+        fScratchBuffer32 = new float[(DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS) * setup->max_block_size]();
+       #endif
 
         return V3_OK;
     }
@@ -1399,7 +1424,8 @@ public:
 
     v3_result process(v3_process_data* const data)
     {
-        DISTRHO_SAFE_ASSERT_RETURN(data->symbolic_sample_size == V3_SAMPLE_32, V3_INVALID_ARG);
+        DISTRHO_SAFE_ASSERT_RETURN(data->symbolic_sample_size == V3_SAMPLE_32 ||
+                                   data->symbolic_sample_size == V3_SAMPLE_64, V3_INVALID_ARG);
         // d_debug("process %i", data->symbolic_sample_size);
 
         // activate plugin if not done yet
@@ -1469,11 +1495,89 @@ public:
             return V3_OK;
         }
 
+        const bool is64Bit = (data->symbolic_sample_size == V3_SAMPLE_64);
+
         const float* inputs[DISTRHO_PLUGIN_NUM_INPUTS != 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
         /* */ float* outputs[DISTRHO_PLUGIN_NUM_OUTPUTS != 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+        const double* inputs64[DISTRHO_PLUGIN_NUM_INPUTS != 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+        /* */ double* outputs64[DISTRHO_PLUGIN_NUM_OUTPUTS != 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
 
-        std::memset(fDummyAudioBuffer, 0, sizeof(float)*data->nframes);
+        if (fDummyAudioBuffer != nullptr)
+            std::memset(fDummyAudioBuffer, 0, sizeof(float)*data->nframes);
+        if (fDummyAudioBuffer64 != nullptr)
+            std::memset(fDummyAudioBuffer64, 0, sizeof(double)*data->nframes);
 
+        if (is64Bit)
+        {
+            int32_t i = 0;
+           #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+            if (data->inputs != nullptr)
+            {
+                for (int32_t b = 0; b < data->num_input_buses; ++b) {
+                    for (int32_t j = 0; j < data->inputs[b].num_channels; ++j)
+                    {
+                        DISTRHO_SAFE_ASSERT_INT_BREAK(i < DISTRHO_PLUGIN_NUM_INPUTS, i);
+                        if (!fEnabledInputs[i] && i < DISTRHO_PLUGIN_NUM_INPUTS) {
+                            inputs64[i++] = fDummyAudioBuffer64;
+                            continue;
+                        }
+
+                        inputs64[i++] = data->inputs[b].channel_buffers_64[j];
+                    }
+                }
+            }
+           #endif
+            for (; i < std::max(1, DISTRHO_PLUGIN_NUM_INPUTS); ++i)
+                inputs64[i] = fDummyAudioBuffer64;
+
+            int32_t o = 0;
+           #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+            if (data->outputs != nullptr)
+            {
+                for (int32_t b = 0; b < data->num_output_buses; ++b) {
+                    for (int32_t j = 0; j < data->outputs[b].num_channels; ++j)
+                    {
+                        DISTRHO_SAFE_ASSERT_INT_BREAK(o < DISTRHO_PLUGIN_NUM_OUTPUTS, o);
+                        if (!fEnabledOutputs[o] && o < DISTRHO_PLUGIN_NUM_OUTPUTS) {
+                            outputs64[o++] = fDummyAudioBuffer64;
+                            continue;
+                        }
+
+                        outputs64[o++] = data->outputs[b].channel_buffers_64[j];
+                    }
+                }
+            }
+           #endif
+            for (; o < std::max(1, DISTRHO_PLUGIN_NUM_OUTPUTS); ++o)
+                outputs64[o] = fDummyAudioBuffer64;
+
+           #if !DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+           #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+            for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+            {
+                inputs[c] = fScratchBuffer32 + c * data->nframes;
+                if (inputs64[c] != nullptr)
+                {
+                    for (int32_t s = 0; s < data->nframes; ++s)
+                        const_cast<float*>(inputs[c])[s] = static_cast<float>(inputs64[c][s]);
+                }
+                else
+                {
+                    std::memset(const_cast<float*>(inputs[c]), 0, sizeof(float) * data->nframes);
+                }
+            }
+           #else
+            inputs[0] = nullptr;
+           #endif
+           #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+            for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                outputs[c] = fScratchBuffer32 + (DISTRHO_PLUGIN_NUM_INPUTS + c) * data->nframes;
+           #else
+            outputs[0] = nullptr;
+           #endif
+           #endif
+        }
+        else
         {
             int32_t i = 0;
            #if DISTRHO_PLUGIN_NUM_INPUTS > 0
@@ -1495,29 +1599,27 @@ public:
            #endif
             for (; i < std::max(1, DISTRHO_PLUGIN_NUM_INPUTS); ++i)
                 inputs[i] = fDummyAudioBuffer;
-        }
 
-        {
-            int32_t i = 0;
+            int32_t o = 0;
            #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
             if (data->outputs != nullptr)
             {
                 for (int32_t b = 0; b < data->num_output_buses; ++b) {
                     for (int32_t j = 0; j < data->outputs[b].num_channels; ++j)
                     {
-                        DISTRHO_SAFE_ASSERT_INT_BREAK(i < DISTRHO_PLUGIN_NUM_OUTPUTS, i);
-                        if (!fEnabledOutputs[i] && i < DISTRHO_PLUGIN_NUM_OUTPUTS) {
-                            outputs[i++] = fDummyAudioBuffer;
+                        DISTRHO_SAFE_ASSERT_INT_BREAK(o < DISTRHO_PLUGIN_NUM_OUTPUTS, o);
+                        if (!fEnabledOutputs[o] && o < DISTRHO_PLUGIN_NUM_OUTPUTS) {
+                            outputs[o++] = fDummyAudioBuffer;
                             continue;
                         }
 
-                        outputs[i++] = data->outputs[b].channel_buffers_32[j];
+                        outputs[o++] = data->outputs[b].channel_buffers_32[j];
                     }
                 }
             }
            #endif
-            for (; i < std::max(1, DISTRHO_PLUGIN_NUM_OUTPUTS); ++i)
-                outputs[i] = fDummyAudioBuffer;
+            for (; o < std::max(1, DISTRHO_PLUGIN_NUM_OUTPUTS); ++o)
+                outputs[o] = fDummyAudioBuffer;
         }
 
        #if DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
@@ -1712,10 +1814,48 @@ public:
                         break;
                 }
             }
+           #endif
 
-            fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+           #if DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+            if (is64Bit)
+            {
+                const double* slicedInputs64[DISTRHO_PLUGIN_NUM_INPUTS > 0 ? DISTRHO_PLUGIN_NUM_INPUTS : 1];
+                double* slicedOutputs64[DISTRHO_PLUGIN_NUM_OUTPUTS > 0 ? DISTRHO_PLUGIN_NUM_OUTPUTS : 1];
+
+               #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_INPUTS; ++c)
+                    slicedInputs64[c] = (inputs64[c] != nullptr) ? (inputs64[c] + currentFrame) : nullptr;
+               #else
+                slicedInputs64[0] = nullptr;
+               #endif
+
+               #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+                for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+                    slicedOutputs64[c] = (outputs64[c] != nullptr) ? (outputs64[c] + currentFrame) : nullptr;
+               #else
+                slicedOutputs64[0] = nullptr;
+               #endif
+
+               #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                fPlugin.runDouble(slicedInputs64, slicedOutputs64, sliceFrames, slicedMidiEvents, sliceMidiCount);
+               #else
+                fPlugin.runDouble(slicedInputs64, slicedOutputs64, sliceFrames);
+               #endif
+            }
+            else
+            {
+               #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+               #else
+                fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+               #endif
+            }
            #else
+           # if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+            fPlugin.run(slicedInputs, slicedOutputs, sliceFrames, slicedMidiEvents, sliceMidiCount);
+           # else
             fPlugin.run(slicedInputs, slicedOutputs, sliceFrames);
+           # endif
            #endif
 
             currentFrame = nextFrame;
@@ -1728,6 +1868,22 @@ public:
             _setNormalizedPluginParameterValue(paramChanges[paramIdx].index, paramChanges[paramIdx].normalized);
             ++paramIdx;
         }
+
+       #if !DISTRHO_PLUGIN_WANT_DOUBLE_PRECISION
+        if (is64Bit)
+        {
+           #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+            for (uint32_t c = 0; c < DISTRHO_PLUGIN_NUM_OUTPUTS; ++c)
+            {
+                if (outputs64[c] != nullptr && outputs[c] != nullptr)
+                {
+                    for (int32_t s = 0; s < data->nframes; ++s)
+                        outputs64[c][s] = static_cast<double>(outputs[c][s]);
+                }
+            }
+           #endif
+        }
+       #endif
 
        #if DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
         fHostEventOutputHandle = nullptr;
@@ -2541,6 +2697,9 @@ private:
     const uint32_t fVst3ParameterCount; // full offset + real
     float* fCachedParameterValues; // basic offset + real
     float* fDummyAudioBuffer;
+    double* fDummyAudioBuffer64;
+    float* fScratchBuffer32;
+    int32_t fSymbolicSampleSize;
     bool* fParameterValuesChangedDuringProcessing; // basic offset + real
    #if DISTRHO_PLUGIN_NUM_INPUTS > 0
     bool fEnabledInputs[DISTRHO_PLUGIN_NUM_INPUTS];
@@ -4374,7 +4533,8 @@ struct dpf_audio_processor : v3_audio_processor_cpp {
     {
         // NOTE runs during RT
         // d_debug("dpf_audio_processor::can_process_sample_size => %i", symbolic_sample_size);
-        return symbolic_sample_size == V3_SAMPLE_32 ? V3_OK : V3_NOT_IMPLEMENTED;
+        return (symbolic_sample_size == V3_SAMPLE_32 || symbolic_sample_size == V3_SAMPLE_64)
+            ? V3_OK : V3_NOT_IMPLEMENTED;
     }
 
     static uint32_t V3_API get_latency_samples(void* const self)

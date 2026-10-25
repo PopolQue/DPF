@@ -496,6 +496,26 @@ protected:
 # endif
 #endif
 
+   /**
+      Request the host to execute `numTasks` across its worker thread pool (CLAP).
+      If the host provides a thread pool, tasks are scheduled and executed in parallel.
+      If the host does not support a thread pool or execution is not available,
+      the framework automatically falls back to sequentially executing threadPoolExec()
+      for each task index [0 .. numTasks - 1].
+      @param numTasks Number of tasks to execute.
+      @return True if the host executed the tasks in parallel, false if sequential fallback was used.
+      @note Can only be called during run() / runDouble().
+    */
+    bool requestHostThreadPool(uint32_t numTasks);
+
+   /**
+      Task execution callback for multi-threaded processing.
+      Invoked by the host's worker threads (or sequential fallback) for each task index [0 .. numTasks - 1].
+      @param taskIndex Task index in the range [0 .. numTasks - 1].
+      @note Can be called concurrently from multiple worker threads!
+    */
+    virtual void threadPoolExec(uint32_t taskIndex);
+
    /* --------------------------------------------------------------------------------------------------------
     * Callbacks (optional) */
 

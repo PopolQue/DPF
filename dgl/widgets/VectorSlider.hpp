@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_SLIDER_HPP_INCLUDED
 #define DGL_VECTOR_SLIDER_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../NanoVG.hpp"
 #include "../../distrho/extra/String.hpp"
@@ -31,7 +32,8 @@ START_NAMESPACE_DGL
 /**
    Resolution-independent, customizable NanoVG vector linear slider.
  */
-class VectorSlider : public NanoSubWidget
+class VectorSlider : public NanoSubWidget,
+                     public AccessibleElement
 {
 public:
     enum Orientation {
@@ -67,6 +69,7 @@ public:
           fThumbHeight(12.0f),
           fCallback(nullptr)
     {
+        initAccessibility();
     }
 
     explicit VectorSlider(NanoSubWidget* const parentWidget, const Orientation orientation = Vertical)
@@ -88,6 +91,7 @@ public:
           fThumbHeight(12.0f),
           fCallback(nullptr)
     {
+        initAccessibility();
     }
 
     explicit VectorSlider(NanoTopLevelWidget* const parentWidget, const Orientation orientation = Vertical)
@@ -109,6 +113,7 @@ public:
           fThumbHeight(12.0f),
           fCallback(nullptr)
     {
+        initAccessibility();
     }
 
     ~VectorSlider() override {}
@@ -151,6 +156,7 @@ public:
             return false;
 
         fValue = val;
+        setAccessibleValue(fValue);
         repaint();
 
         if (sendCallback && fCallback != nullptr)
@@ -482,6 +488,13 @@ private:
     float fThumbWidth;
     float fThumbHeight;
     Callback* fCallback;
+
+    void initAccessibility()
+    {
+        setAccessibleRole(kAccessibleRoleSlider);
+        setAccessibleRange(fMin, fMax, fStep);
+        setAccessibleValue(fValue);
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorSlider)
 };

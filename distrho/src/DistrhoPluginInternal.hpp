@@ -49,6 +49,7 @@ extern bool        d_nextCanRequestParameterValueChanges;
 typedef bool (*writeMidiFunc) (void* ptr, const MidiEvent& midiEvent);
 typedef bool (*requestParameterValueChangeFunc) (void* ptr, uint32_t index, float value);
 typedef bool (*updateStateValueFunc) (void* ptr, const char* key, const char* value);
+typedef bool (*requestThreadPoolFunc) (void* ptr, uint32_t numTasks);
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -181,6 +182,7 @@ struct Plugin::PrivateData {
     writeMidiFunc writeMidiCallbackFunc;
     requestParameterValueChangeFunc requestParameterValueChangeCallbackFunc;
     updateStateValueFunc updateStateValueCallbackFunc;
+    requestThreadPoolFunc requestThreadPoolCallbackFunc;
 
     uint32_t bufferSize;
     double   sampleRate;
@@ -222,6 +224,7 @@ struct Plugin::PrivateData {
           writeMidiCallbackFunc(nullptr),
           requestParameterValueChangeCallbackFunc(nullptr),
           updateStateValueCallbackFunc(nullptr),
+          requestThreadPoolCallbackFunc(nullptr),
           bufferSize(d_nextBufferSize),
           sampleRate(d_nextSampleRate),
           bundlePath(d_nextBundlePath != nullptr ? strdup(d_nextBundlePath) : nullptr),
@@ -330,6 +333,14 @@ struct Plugin::PrivateData {
         return false;
     }
 #endif
+
+    bool requestHostThreadPool(const uint32_t numTasks)
+    {
+        if (requestThreadPoolCallbackFunc != nullptr && callbacksPtr != nullptr)
+            return requestThreadPoolCallbackFunc(callbacksPtr, numTasks);
+
+        return false;
+    }
 };
 
 // -----------------------------------------------------------------------
@@ -1166,6 +1177,18 @@ public:
         DISTRHO_SAFE_ASSERT_RETURN(fData != nullptr,);
         fData->trackName = name != nullptr ? name : "";
         fData->trackColor = color;
+    }
+
+    void setThreadPoolCallback(requestThreadPoolFunc func) noexcept
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fData != nullptr,);
+        fData->requestThreadPoolCallbackFunc = func;
+    }
+
+    void threadPoolExec(const uint32_t taskIndex)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr,);
+        fPlugin->threadPoolExec(taskIndex);
     }
 
 private:

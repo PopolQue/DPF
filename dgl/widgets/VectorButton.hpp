@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_BUTTON_HPP_INCLUDED
 #define DGL_VECTOR_BUTTON_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../EventHandlers.hpp"
 #include "../NanoVG.hpp"
@@ -33,7 +34,8 @@ START_NAMESPACE_DGL
    Supports momentary and toggle modes, hover/active states, and an optional LED status indicator.
  */
 class VectorButton : public NanoSubWidget,
-                     public ButtonEventHandler
+                     public ButtonEventHandler,
+                     public AccessibleElement
 {
 public:
     enum Mode {
@@ -68,6 +70,7 @@ public:
           fUserCallback(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     explicit VectorButton(NanoSubWidget* const parentWidget)
@@ -89,6 +92,7 @@ public:
           fUserCallback(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     explicit VectorButton(NanoTopLevelWidget* const parentWidget)
@@ -110,6 +114,7 @@ public:
           fUserCallback(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -402,9 +407,17 @@ private:
             if (self->fUserCallback != nullptr)
                 self->fUserCallback->vectorButtonClicked(self, button);
 
+            self->setAccessibleValue(self->isChecked() ? 1.0f : 0.0f);
             self->repaint();
         }
     } fInternalCallback{this};
+
+    void initAccessibility()
+    {
+        setAccessibleRole(fMode == Toggle ? kAccessibleRoleCheckBox : kAccessibleRoleButton);
+        setAccessibleRange(0.0f, 1.0f, 1.0f);
+        setAccessibleValue(isChecked() ? 1.0f : 0.0f);
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorButton)
 };

@@ -45,6 +45,7 @@ UNIT_TESTS   += Window.opengl
 UNIT_TESTS   += TestVectorWidgets
 UNIT_TESTS   += TestVectorScopeAndTabs
 UNIT_TESTS   += TestVectorSpectrum
+UNIT_TESTS   += TestThreadPoolAndA11y
 endif
 ifeq ($(HAVE_STUB),true)
 UNIT_TESTS   += Window.stub
@@ -195,9 +196,13 @@ clean:
 	@echo "Linking TestVectorSpectrum (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestThreadPoolAndA11y$(APP_EXT): ../build/tests/TestThreadPoolAndA11y.cpp.o ../build/libdgl-opengl.a
+	@echo "Linking TestThreadPoolAndA11y (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y
 
 -include $(ALL_OBJS:%.o=%.d)
 

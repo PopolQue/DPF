@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_COMBO_BOX_HPP_INCLUDED
 #define DGL_VECTOR_COMBO_BOX_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../NanoVG.hpp"
 #include "../../distrho/extra/String.hpp"
@@ -32,7 +33,8 @@ START_NAMESPACE_DGL
    Resolution-independent, customizable NanoVG vector combo box / dropdown selector.
    Supports item lists, hover highlights, vector chevron indicator, popup overlay, and keyboard navigation.
  */
-class VectorComboBox : public NanoSubWidget
+class VectorComboBox : public NanoSubWidget,
+                       public AccessibleElement
 {
 public:
     class Callback
@@ -59,7 +61,9 @@ public:
           fFontSize(12.0f),
           fItemHeight(24.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     explicit VectorComboBox(NanoSubWidget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -78,7 +82,9 @@ public:
           fFontSize(12.0f),
           fItemHeight(24.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     explicit VectorComboBox(NanoTopLevelWidget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -97,7 +103,9 @@ public:
           fFontSize(12.0f),
           fItemHeight(24.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Item Management
@@ -170,6 +178,7 @@ public:
             return;
 
         fCurrentIndex = index;
+        setAccessibleValue(static_cast<float>(fCurrentIndex), getCurrentItem().buffer());
         repaint();
 
         if (sendCallback && fUserCallback != nullptr && fCurrentIndex >= 0)
@@ -518,6 +527,13 @@ private:
     float fFontSize;
     float fItemHeight;
     Callback* fUserCallback;
+
+    void initAccessibility()
+    {
+        setAccessibleRole(kAccessibleRoleComboBox);
+        setAccessibleRange(0.0f, static_cast<float>(fItems.size()));
+        setAccessibleValue(static_cast<float>(fCurrentIndex), getCurrentItem().buffer());
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorComboBox)
 };

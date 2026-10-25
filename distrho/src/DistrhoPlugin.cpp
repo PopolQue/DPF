@@ -387,6 +387,22 @@ void Plugin::runDouble(const double** inputs, double** outputs, uint32_t frames)
 }
 #endif
 
+bool Plugin::requestHostThreadPool(const uint32_t numTasks)
+{
+    if (numTasks == 0)
+        return true;
+
+    if (pData->requestHostThreadPool(numTasks))
+        return true;
+
+    for (uint32_t i = 0; i < numTasks; ++i)
+        threadPoolExec(i);
+
+    return false;
+}
+
+void Plugin::threadPoolExec(uint32_t) {}
+
 // -----------------------------------------------------------------------------------------------------------
 
 END_NAMESPACE_DISTRHO

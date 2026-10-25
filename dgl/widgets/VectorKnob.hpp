@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_KNOB_HPP_INCLUDED
 #define DGL_VECTOR_KNOB_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../EventHandlers.hpp"
 #include "../NanoVG.hpp"
@@ -33,7 +34,8 @@ START_NAMESPACE_DGL
    Resolution-independent, customizable NanoVG vector rotary knob.
  */
 class VectorKnob : public NanoSubWidget,
-                   public KnobEventHandler
+                   public KnobEventHandler,
+                   public AccessibleElement
 {
 public:
     class Callback
@@ -64,6 +66,7 @@ public:
           fUserCallback(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     explicit VectorKnob(NanoSubWidget* const parentWidget)
@@ -84,6 +87,7 @@ public:
           fUserCallback(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     explicit VectorKnob(NanoTopLevelWidget* const parentWidget)
@@ -104,6 +108,7 @@ public:
           fUserCallback(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
+        initAccessibility();
     }
 
     ~VectorKnob() override {}
@@ -210,7 +215,10 @@ public:
     {
         const bool changed = KnobEventHandler::setValue(value, sendCallback);
         if (changed)
+        {
+            setAccessibleValue(getValue());
             repaint();
+        }
         return changed;
     }
 
@@ -389,6 +397,7 @@ private:
 
         void knobValueChanged(SubWidget*, const float value) override
         {
+            self->setAccessibleValue(value);
             self->repaint();
             if (self->fUserCallback != nullptr)
                 self->fUserCallback->vectorKnobValueChanged(self, value);
@@ -400,6 +409,13 @@ private:
                 self->fUserCallback->vectorKnobDoubleClicked(self);
         }
     } fInternalCallback{this};
+
+    void initAccessibility()
+    {
+        setAccessibleRole(kAccessibleRoleDial);
+        setAccessibleRange(getMinimum(), getMaximum());
+        setAccessibleValue(getValue());
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorKnob)
 };

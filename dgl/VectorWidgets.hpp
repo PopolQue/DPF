@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_WIDGETS_HPP_INCLUDED
 #define DGL_VECTOR_WIDGETS_HPP_INCLUDED
 
+#include "Accessibility.hpp"
 #include "widgets/VectorKnob.hpp"
 #include "widgets/VectorSlider.hpp"
 #include "widgets/VectorMeter.hpp"
@@ -25,5 +26,6 @@
 #include "widgets/VectorScope.hpp"
 #include "widgets/VectorTabGroup.hpp"
 #include "widgets/VectorSpectrum.hpp"
+#include "widgets/VectorTextEditor.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

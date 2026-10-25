@@ -64,6 +64,7 @@
 #include "clap/ext/thread-check.h"
 #include "clap/ext/timer-support.h"
 #include "clap/ext/track-info.h"
+#include "clap/ext/thread-pool.h"
 #include "clap/ext/preset-load.h"
 #include "clap/factory/preset-discovery.h"
 #include "../extra/PresetManager.hpp"
@@ -839,6 +840,7 @@ public:
        #endif
 
         fillInRemoteControlPages();
+        fPlugin.setThreadPoolCallback(requestThreadPoolCallback);
     }
 
     ~PluginCLAP()
@@ -2246,6 +2248,7 @@ private:
        #endif
         const clap_host_remote_controls_t* remoteControls;
         const clap_host_track_info_t* trackInfo;
+        const clap_host_thread_pool_t* threadPool;
 
         HostExtensions(const clap_host_t* const host)
             : host(host),
@@ -2256,6 +2259,7 @@ private:
            #endif
             , remoteControls(nullptr)
             , trackInfo(nullptr)
+            , threadPool(nullptr)
         {}
 
         bool init()
@@ -2269,6 +2273,7 @@ private:
            #endif
             remoteControls = static_cast<const clap_host_remote_controls_t*>(host->get_extension(host, CLAP_EXT_REMOTE_CONTROLS));
             trackInfo = static_cast<const clap_host_track_info_t*>(host->get_extension(host, CLAP_EXT_TRACK_INFO));
+            threadPool = static_cast<const clap_host_thread_pool_t*>(host->get_extension(host, CLAP_EXT_THREAD_POOL));
             return true;
         }
     } fHostExtensions;
@@ -2485,7 +2490,25 @@ private:
     }
    #endif
 
+    bool requestThreadPool(const uint32_t numTasks)
+    {
+        if (fHostExtensions.threadPool != nullptr && fHostExtensions.threadPool->request_exec != nullptr)
+            return fHostExtensions.threadPool->request_exec(fHost, numTasks);
+
+        return false;
+    }
+
+    static bool requestThreadPoolCallback(void* const ptr, const uint32_t numTasks)
+    {
+        return static_cast<PluginCLAP*>(ptr)->requestThreadPool(numTasks);
+    }
+
 public:
+    void threadPoolExec(const uint32_t taskIndex)
+    {
+        fPlugin.threadPoolExec(taskIndex);
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // remote controls
 
@@ -3303,8 +3326,22 @@ static const clap_plugin_audio_ports_config_t clap_plugin_audio_ports_config = {
     clap_plugin_audio_ports_config_select
 };
 
+// thread pool
+
+static void CLAP_ABI clap_plugin_thread_pool_exec(const clap_plugin_t* const plugin, const uint32_t task_index)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    instance->threadPoolExec(task_index);
+}
+
+static const clap_plugin_thread_pool_t clap_plugin_thread_pool = {
+    clap_plugin_thread_pool_exec
+};
+
 static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t* const plugin, const char* const id)
 {
+    if (std::strcmp(id, CLAP_EXT_THREAD_POOL) == 0)
+        return &clap_plugin_thread_pool;
     if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG) == 0 ||
         std::strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG_COMPAT) == 0)
     {

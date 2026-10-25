@@ -23,6 +23,8 @@
 #include "../Color.hpp"
 #include "../ImageBaseWidgets.hpp"
 
+#include "pugl/vulkan.h"
+
 #include "SubWidgetPrivateData.hpp"
 #include "TopLevelWidgetPrivateData.hpp"
 #include "WidgetPrivateData.hpp"
@@ -275,18 +277,68 @@ void Window::PrivateData::renderToPicture(const char*, const GraphicsContext&, u
 
 void Window::PrivateData::createContextIfNeeded()
 {
+    VulkanGraphicsContext& ctx = reinterpret_cast<VulkanGraphicsContext&>(graphicsContext);
+    if (ctx.surface != VK_NULL_HANDLE)
+        return;
+
+    const PuglArea size = puglGetSizeHint(view, PUGL_CURRENT_SIZE);
+    ctx.width = size.width;
+    ctx.height = size.height;
+
+    if (ctx.instance != VK_NULL_HANDLE)
+    {
+        PuglVulkanLoader* const loader = puglNewVulkanLoader(puglGetWorld(view), nullptr);
+        if (loader != nullptr)
+        {
+            PFN_vkGetInstanceProcAddr const getProc = puglGetInstanceProcAddrFunc(loader);
+            if (getProc != nullptr)
+                puglCreateSurface(getProc, view, ctx.instance, nullptr, &ctx.surface);
+            puglFreeVulkanLoader(loader);
+        }
+    }
 }
 
 void Window::PrivateData::destroyContext()
 {
+    VulkanGraphicsContext& ctx = reinterpret_cast<VulkanGraphicsContext&>(graphicsContext);
+
+    if (ctx.instance != VK_NULL_HANDLE && ctx.surface != VK_NULL_HANDLE)
+    {
+        PuglVulkanLoader* const loader = puglNewVulkanLoader(puglGetWorld(view), nullptr);
+        if (loader != nullptr)
+        {
+            PFN_vkGetInstanceProcAddr const getProc = puglGetInstanceProcAddrFunc(loader);
+            if (getProc != nullptr)
+            {
+                typedef void (VKAPI_PTR *PFN_vkDestroySurfaceKHR_local)(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks*);
+                PFN_vkDestroySurfaceKHR_local const destroySurface = (PFN_vkDestroySurfaceKHR_local)getProc(ctx.instance, "vkDestroySurfaceKHR");
+                if (destroySurface != nullptr)
+                    destroySurface(ctx.instance, ctx.surface, nullptr);
+            }
+            puglFreeVulkanLoader(loader);
+        }
+        ctx.surface = VK_NULL_HANDLE;
+    }
+
+    ctx.swapchain = VK_NULL_HANDLE;
+    ctx.renderPass = VK_NULL_HANDLE;
+    ctx.currentCommandBuffer = VK_NULL_HANDLE;
 }
 
 void Window::PrivateData::startContext()
 {
+    createContextIfNeeded();
+
+    VulkanGraphicsContext& ctx = reinterpret_cast<VulkanGraphicsContext&>(graphicsContext);
+    const PuglArea size = puglGetSizeHint(view, PUGL_CURRENT_SIZE);
+    ctx.width = size.width;
+    ctx.height = size.height;
 }
 
 void Window::PrivateData::endContext()
 {
+    VulkanGraphicsContext& ctx = reinterpret_cast<VulkanGraphicsContext&>(graphicsContext);
+    ctx.currentCommandBuffer = VK_NULL_HANDLE;
 }
 
 // -----------------------------------------------------------------------

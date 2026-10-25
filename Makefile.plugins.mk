@@ -295,6 +295,18 @@ HAVE_DGL   = false
 endif
 endif
 
+ifeq ($(UI_TYPE),metal)
+ifeq ($(HAVE_METAL),true)
+DGL_FLAGS += -DDGL_METAL -DHAVE_DGL
+DGL_FLAGS += $(METAL_FLAGS)
+DGL_LIBS  += $(METAL_LIBS)
+DGL_LIB    = $(DGL_BUILD_DIR)/libdgl-metal.a
+HAVE_DGL   = true
+else
+HAVE_DGL   = false
+endif
+endif
+
 ifeq ($(UI_TYPE),external)
 DGL_FLAGS += -DDGL_EXTERNAL -DHAVE_DGL
 ifeq ($(HAVE_STUB),true)

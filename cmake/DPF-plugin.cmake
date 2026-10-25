@@ -162,6 +162,11 @@ function(dpf_add_plugin NAME)
                           $<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
                           $<BOOL:${_dpf_plugin_USE_WEB_VIEW}>)
       set(_dgl_library dgl-vulkan)
+    elseif(_dpf_plugin_UI_TYPE STREQUAL "metal")
+      dpf__add_dgl_metal($<NOT:$<BOOL:${_dpf_plugin_NO_SHARED_RESOURCES}>>
+                         $<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
+                         $<BOOL:${_dpf_plugin_USE_WEB_VIEW}>)
+      set(_dgl_library dgl-metal)
     elseif(_dpf_plugin_UI_TYPE STREQUAL "webview")
       set(_dpf_plugin_USE_WEB_VIEW TRUE)
       dpf__add_dgl_external($<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
@@ -341,6 +346,11 @@ function(dpf_add_executable NAME)
                         $<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
                         $<BOOL:${_dpf_plugin_USE_WEB_VIEW}>)
     set(_dgl_library dgl-vulkan)
+  elseif(_dpf_plugin_UI_TYPE STREQUAL "metal")
+    dpf__add_dgl_metal($<NOT:$<BOOL:${_dpf_plugin_NO_SHARED_RESOURCES}>>
+                       $<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
+                       $<BOOL:${_dpf_plugin_USE_WEB_VIEW}>)
+    set(_dgl_library dgl-metal)
   elseif(_dpf_plugin_UI_TYPE STREQUAL "webview")
     set(_dpf_plugin_USE_WEB_VIEW TRUE)
     dpf__add_dgl_external($<BOOL:${_dpf_plugin_USE_FILE_BROWSER}>
@@ -1474,6 +1484,72 @@ function(dpf__add_dgl_vulkan SHARED_RESOURCES USE_FILE_BROWSER USE_WEB_VIEW)
 
   target_include_directories(dgl-vulkan PUBLIC "${OPENGL_INCLUDE_DIR}")
   target_link_libraries(dgl-vulkan PRIVATE dgl-vulkan-definitions "${OPENGL_gl_LIBRARY}")
+endfunction()
+
+# ------------------------------------------------------------------------------
+#
+# Add the Metal variant of DGL, if not already available.
+#
+function(dpf__add_dgl_metal SHARED_RESOURCES USE_FILE_BROWSER USE_WEB_VIEW)
+  if(TARGET dgl-metal)
+    return()
+  endif()
+
+  if(NOT APPLE)
+    message(FATAL_ERROR "Metal UI is only supported on Apple platforms")
+  endif()
+
+  find_library(APPLE_METAL_FRAMEWORK "Metal" REQUIRED)
+  find_library(APPLE_QUARTZCORE_FRAMEWORK "QuartzCore" REQUIRED)
+
+  dpf__add_static_library(dgl-metal STATIC
+    "${DPF_ROOT_DIR}/dgl/src/Application.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/ApplicationPrivateData.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Color.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/EventHandlers.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Geometry.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/ImageBase.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/ImageBaseWidgets.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Layout.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/SubWidget.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/SubWidgetPrivateData.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/TopLevelWidget.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/TopLevelWidgetPrivateData.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Widget.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/WidgetPrivateData.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Window.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/WindowPrivateData.cpp"
+    "${DPF_ROOT_DIR}/dgl/src/Metal.mm"
+    "${DPF_ROOT_DIR}/dgl/src/pugl.mm")
+
+  if(NO_SHARED_RESOURCES)
+    target_sources(dgl-metal PRIVATE "${DPF_ROOT_DIR}/dgl/src/Resources.cpp")
+  else()
+    target_compile_definitions(dgl-metal PUBLIC "DGL_NO_SHARED_RESOURCES")
+  endif()
+
+  target_include_directories(dgl-metal PUBLIC
+    "${DPF_ROOT_DIR}/dgl")
+  target_include_directories(dgl-metal PUBLIC
+    "${DPF_ROOT_DIR}/dgl/src/pugl-upstream/include")
+
+  if(USE_FILE_BROWSER)
+    target_compile_definitions(dgl-metal PUBLIC "DGL_USE_FILE_BROWSER")
+  endif()
+
+  if(USE_WEB_VIEW)
+    target_compile_definitions(dgl-metal PUBLIC "DGL_USE_WEB_VIEW")
+    find_library(APPLE_WEBKIT_FRAMEWORK "WebKit")
+    target_link_libraries(dgl-metal PRIVATE "${APPLE_WEBKIT_FRAMEWORK}")
+  endif()
+
+  dpf__add_dgl_system_libs()
+  target_link_libraries(dgl-metal PRIVATE dgl-system-libs "${APPLE_METAL_FRAMEWORK}" "${APPLE_QUARTZCORE_FRAMEWORK}")
+
+  add_library(dgl-metal-definitions INTERFACE)
+  target_compile_definitions(dgl-metal-definitions INTERFACE "DGL_METAL" "HAVE_METAL" "HAVE_DGL")
+
+  target_link_libraries(dgl-metal PUBLIC dgl-metal-definitions "${APPLE_METAL_FRAMEWORK}" "${APPLE_QUARTZCORE_FRAMEWORK}")
 endfunction()
 
 # dpf__add_plugin_specific_ui_sources

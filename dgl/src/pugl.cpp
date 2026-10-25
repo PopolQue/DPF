@@ -55,6 +55,10 @@
 #  import <QuartzCore/CAMetalLayer.h>
 #  include <vulkan/vulkan_macos.h>
 # endif
+# ifdef DGL_METAL
+#  import <Metal/Metal.h>
+#  import <QuartzCore/CAMetalLayer.h>
+# endif
 #elif defined(DISTRHO_OS_WASM)
 # include <emscripten/emscripten.h>
 # include <emscripten/html5.h>
@@ -157,6 +161,7 @@ START_NAMESPACE_DGL
 #  define PuglOpenGLView     DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglOpenGLView)
 #  define PuglStubView       DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglStubView)
 #  define PuglVulkanView     DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglVulkanView)
+#  define PuglMetalView      DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglMetalView)
 #  define PuglWindow         DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglWindow)
 #  define PuglWindowDelegate DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglWindowDelegate)
 #  define PuglWrapperView    DISTRHO_MACOS_NAMESPACE_MACRO(DGL_NAMESPACE, DISTRHO_MACOS_NAMESPACE_TIME, PuglWrapperView)
@@ -173,6 +178,9 @@ START_NAMESPACE_DGL
 # endif
 # ifdef DGL_VULKAN
 #  import "pugl-upstream/src/mac_vulkan.m"
+# endif
+# ifdef DGL_METAL
+#  import "pugl-extra/mac_metal.m"
 # endif
 # pragma clang diagnostic pop
 #elif defined(DISTRHO_OS_WASM)
@@ -246,6 +254,9 @@ void puglSetMatchingBackendForCurrentBuild(PuglView* const view)
    #endif
    #ifdef DGL_VULKAN
     puglSetBackend(view, puglVulkanBackend());
+   #endif
+   #ifdef DGL_METAL
+    puglSetBackend(view, puglMetalBackend());
    #endif
 
     if (view->backend != nullptr)

@@ -49,6 +49,9 @@ endif
 ifeq ($(HAVE_VULKAN),true)
 UNIT_TESTS   += Window.vulkan
 endif
+ifeq ($(HAVE_METAL),true)
+UNIT_TESTS   += Window.metal
+endif
 endif
 
 MANUAL_TARGETS = $(MANUAL_TESTS:%=../build/tests/%$(APP_EXT))
@@ -118,6 +121,11 @@ clean:
 	@echo "Compiling $< (Vulkan)"
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) $(OPENGL_FLAGS) -DDGL_VULKAN -c -o $@
 
+../build/tests/%.cpp.metal.o: %.cpp
+	-@mkdir -p ../build/tests
+	@echo "Compiling $< (Metal)"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) $(METAL_FLAGS) -DDGL_METAL -c -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 # linking steps
 
@@ -140,6 +148,10 @@ clean:
 ../build/tests/%.vulkan$(APP_EXT): ../build/tests/%.cpp.vulkan.o
 	@echo "Linking $*"
 	$(SILENT)$(CXX) $< $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(VULKAN_LIBS) -o $@
+
+../build/tests/%.metal$(APP_EXT): ../build/tests/%.cpp.metal.o
+	@echo "Linking $*"
+	$(SILENT)$(CXX) $< $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(METAL_LIBS) -o $@
 
 # ---------------------------------------------------------------------------------------------------------------------
 # linking steps (special, links against DGL static lib)

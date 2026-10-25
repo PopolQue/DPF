@@ -45,7 +45,7 @@ struct Window::PrivateData : IdleCallback {
     PuglView* view;
 
     /** Reserved space for graphics context. */
-    mutable uint8_t graphicsContext[sizeof(int) * 9];
+    alignas(void*) mutable uint8_t graphicsContext[sizeof(void*) * 16];
     void createContextIfNeeded();
     void destroyContext();
     void startContext();

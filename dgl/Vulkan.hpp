@@ -27,9 +27,21 @@ START_NAMESPACE_DGL
 
 /**
    Vulkan Graphics context.
+
+   Provides access to the active Vulkan instance, device, queue, surface, swapchain and current command buffer.
  */
 struct VulkanGraphicsContext : GraphicsContext
 {
+    VkInstance instance;
+    VkPhysicalDevice physicalDevice;
+    VkDevice device;
+    VkQueue queue;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    VkRenderPass renderPass;
+    VkCommandBuffer currentCommandBuffer;
+    uint32_t width;
+    uint32_t height;
 };
 
 // --------------------------------------------------------------------------------------------------------------------

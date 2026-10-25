@@ -145,6 +145,15 @@ endif
 
 # ---------------------------------------------------------------------------------------------------------------------
 
+OBJS_metal = $(OBJS_common) \
+	$(BUILD_DIR)/dgl/Metal.mm.metal.o
+
+ifeq ($(MACOS),true)
+OBJS_metal += $(BUILD_DIR)/dgl/pugl.mm.metal.o
+endif
+
+# ---------------------------------------------------------------------------------------------------------------------
+
 ifeq ($(HAVE_CAIRO),true)
 TARGETS += $(BUILD_DIR)/libdgl-cairo.a
 endif
@@ -164,6 +173,10 @@ ifeq ($(HAVE_VULKAN),true)
 TARGETS += $(BUILD_DIR)/libdgl-vulkan.a
 endif
 
+ifeq ($(HAVE_METAL),true)
+TARGETS += $(BUILD_DIR)/libdgl-metal.a
+endif
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 all: $(TARGETS)
@@ -178,6 +191,7 @@ else
 opengl:  $(BUILD_DIR)/libdgl-opengl.a
 opengl3: $(BUILD_DIR)/libdgl-opengl3.a
 endif
+metal:   $(BUILD_DIR)/libdgl-metal.a
 stub:    $(BUILD_DIR)/libdgl-stub.a
 vulkan:  $(BUILD_DIR)/libdgl-vulkan.a
 web:     $(BUILD_DIR)/libdgl-web.a
@@ -223,6 +237,12 @@ $(BUILD_DIR)/libdgl-stub.a: $(OBJS_stub)
 $(BUILD_DIR)/libdgl-vulkan.a: $(OBJS_vulkan)
 	-@mkdir -p $(BUILD_DIR)
 	@echo "Creating libdgl-vulkan.a"
+	$(SILENT)rm -f $@
+	$(SILENT)$(AR) crs $@ $^
+
+$(BUILD_DIR)/libdgl-metal.a: $(OBJS_metal)
+	-@mkdir -p $(BUILD_DIR)
+	@echo "Creating libdgl-metal.a"
 	$(SILENT)rm -f $@
 	$(SILENT)$(AR) crs $@ $^
 
@@ -334,6 +354,13 @@ $(BUILD_DIR)/dgl/%.mm.vulkan.o: src/%.mm
 
 # ---------------------------------------------------------------------------------------------------------------------
 
+$(BUILD_DIR)/dgl/%.mm.metal.o: src/%.mm
+	-@mkdir -p $(BUILD_DIR)/dgl
+	@echo "Compiling $< (Metal variant)"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) $(PUGL_EXTRA_FLAGS) $(METAL_FLAGS) -DDGL_METAL -c -ObjC++ -o $@
+
+# ---------------------------------------------------------------------------------------------------------------------
+
 clean:
 	rm -rf $(BUILD_DIR)/dgl $(BUILD_DIR)/libdgl*.*
 
@@ -350,5 +377,6 @@ debug:
 -include $(OBJS_opengl3:%.o=%.d)
 -include $(OBJS_stub:%.o=%.d)
 -include $(OBJS_vulkan:%.o=%.d)
+-include $(OBJS_metal:%.o=%.d)
 
 # ---------------------------------------------------------------------------------------------------------------------

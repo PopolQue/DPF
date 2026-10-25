@@ -102,6 +102,9 @@ PuglStatus puglMacOSRemoveChildWindow(PuglView* view, PuglView* child);
 // macOS specific, center view based on parent coordinates (if there is one)
 void puglMacOSShowCentered(PuglView* view);
 
+// macOS specific, Metal graphics backend
+const PuglBackend* puglMetalBackend(void);
+
 #elif defined(DISTRHO_OS_WASM)
 
 // nothing here yet

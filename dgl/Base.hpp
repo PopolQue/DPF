@@ -35,6 +35,14 @@
 # error invalid build config: trying to build for both external and vulkan at the same time
 #elif defined(DGL_OPENGL) && defined(DGL_VULKAN)
 # error invalid build config: trying to build for both opengl and vulkan at the same time
+#elif defined(DGL_METAL) && defined(DGL_CAIRO)
+# error invalid build config: trying to build for both metal and cairo at the same time
+#elif defined(DGL_METAL) && defined(DGL_EXTERNAL)
+# error invalid build config: trying to build for both metal and external at the same time
+#elif defined(DGL_METAL) && defined(DGL_OPENGL)
+# error invalid build config: trying to build for both metal and opengl at the same time
+#elif defined(DGL_METAL) && defined(DGL_VULKAN)
+# error invalid build config: trying to build for both metal and vulkan at the same time
 #endif
 
 #ifdef DGL_USE_FILEBROWSER

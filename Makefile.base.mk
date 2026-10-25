@@ -590,6 +590,18 @@ endif
 endif
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Set Metal specific stuff (macOS only)
+
+ifeq ($(MACOS),true)
+
+HAVE_METAL = true
+DGL_FLAGS   += -DHAVE_METAL
+METAL_FLAGS  =
+METAL_LIBS   = -framework Metal -framework QuartzCore
+
+endif
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Set optional libraries specific stuff
 
 ifeq ($(HAVE_ALSA),true)

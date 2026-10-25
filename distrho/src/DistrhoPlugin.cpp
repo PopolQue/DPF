@@ -177,6 +177,18 @@ uint32_t Plugin::getTrackColor() const noexcept
     return pData->trackColor;
 }
 
+uint32_t Plugin::getNoteExpressionEventCount() const noexcept
+{
+    return static_cast<uint32_t>(pData->noteExpressionEvents.size());
+}
+
+const NoteExpressionEvent& Plugin::getNoteExpressionEvent(const uint32_t index) const noexcept
+{
+    static const NoteExpressionEvent sFallback{};
+    DISTRHO_SAFE_ASSERT_RETURN(index < pData->noteExpressionEvents.size(), sFallback);
+    return pData->noteExpressionEvents[index];
+}
+
 /* ------------------------------------------------------------------------------------------------------------
  * Init */
 

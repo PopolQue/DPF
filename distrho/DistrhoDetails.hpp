@@ -948,6 +948,31 @@ struct MidiEvent {
 };
 
 /**
+   Note expression types for per-note modulation (MPE, CLAP & VST3 note expressions).
+ */
+enum NoteExpressionType {
+    kNoteExpressionVolume     = 0,
+    kNoteExpressionPan        = 1,
+    kNoteExpressionTuning     = 2, ///< Semitone tuning offset relative to note key
+    kNoteExpressionVibrato    = 3,
+    kNoteExpressionExpression = 4,
+    kNoteExpressionBrightness = 5, ///< Timbre / Filter cutoff / CC74 (0.0 to 1.0)
+    kNoteExpressionPressure   = 6, ///< Polyphonic pressure / aftertouch (0.0 to 1.0)
+};
+
+/**
+   Per-note expression event.
+ */
+struct NoteExpressionEvent {
+    uint32_t frame;
+    int16_t  key;        ///< 0-127, or -1 if keyed by noteId
+    int16_t  channel;    ///< 0-15, or -1 if keyed by noteId
+    int32_t  noteId;     ///< Unique note ID assigned by host for polyphonic tracking
+    NoteExpressionType type;
+    double   value;
+};
+
+/**
    Time position.@n
    The @a playing and @a frame values are always valid.@n
    BBT values are only valid when @a bbt.valid is true.

@@ -34,6 +34,35 @@ START_NAMESPACE_DISTRHO
 
 namespace PresetDetail {
 
+template <typename T>
+auto trySetState(T& plugin, const char* key, const char* value, int)
+    -> decltype(plugin.setState(key, value), void())
+{
+    plugin.setState(key, value);
+}
+
+template <typename T>
+void trySetState(T&, const char*, const char*, ...)
+{
+}
+
+template <typename T, typename PresetType>
+auto tryCaptureStates(const T& plugin, PresetType& p, int)
+    -> decltype(plugin.getStateCount(), void())
+{
+    const uint32_t stateCount = plugin.getStateCount();
+    for (uint32_t i = 0; i < stateCount; ++i)
+    {
+        const String& key = plugin.getStateKey(i);
+        p.setState(key.buffer(), plugin.getState(key.buffer()).buffer());
+    }
+}
+
+template <typename T, typename PresetType>
+void tryCaptureStates(const T&, PresetType&, ...)
+{
+}
+
 static inline std::string escapeJSON(const char* const str)
 {
     if (str == nullptr)
@@ -480,6 +509,43 @@ struct Preset
         buf << file.rdbuf();
         return fromJSON(buf.str().c_str());
     }
+
+    template <class PluginType>
+    bool applyToPlugin(PluginType& plugin) const
+    {
+        const uint32_t paramCount = plugin.getParameterCount();
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
+            const String& sym = parameters[i].first;
+            const float val = parameters[i].second;
+
+            bool found = false;
+            for (uint32_t k = 0; k < paramCount; ++k)
+            {
+                if (plugin.getParameterSymbol(k) == sym)
+                {
+                    plugin.setParameterValue(k, val);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                char* end = nullptr;
+                long parsedIdx = std::strtol(sym.buffer(), &end, 10);
+                if (end != sym.buffer() && parsedIdx >= 0 && parsedIdx < static_cast<long>(paramCount))
+                    plugin.setParameterValue(static_cast<uint32_t>(parsedIdx), val);
+            }
+        }
+
+        for (size_t i = 0; i < states.size(); ++i)
+        {
+            PresetDetail::trySetState(plugin, states[i].first.buffer(), states[i].second.buffer(), 0);
+        }
+
+        return true;
+    }
 };
 
 // --------------------------------------------------------------------------------------------------------------------
@@ -665,44 +731,12 @@ public:
         if (index >= fPresets.size())
             return false;
 
-        const Preset& p = fPresets[index];
-
-        // Apply parameters by matching symbols or indices
-        const uint32_t paramCount = plugin.getParameterCount();
-        for (size_t i = 0; i < p.parameters.size(); ++i)
+        if (fPresets[index].applyToPlugin(plugin))
         {
-            const String& sym = p.parameters[i].first;
-            const float val = p.parameters[i].second;
-
-            // Search by symbol
-            bool found = false;
-            for (uint32_t k = 0; k < paramCount; ++k)
-            {
-                if (plugin.getParameterSymbol(k) == sym)
-                {
-                    plugin.setParameterValue(k, val);
-                    found = true;
-                    break;
-                }
-            }
-
-            // Fallback: if symbol is numerical index e.g. "param_0" or "0"
-            if (!found)
-            {
-                char* end = nullptr;
-                long parsedIdx = std::strtol(sym.buffer(), &end, 10);
-                if (end != sym.buffer() && parsedIdx >= 0 && parsedIdx < static_cast<long>(paramCount))
-                    plugin.setParameterValue(static_cast<uint32_t>(parsedIdx), val);
-            }
+            fActiveIndex = static_cast<int32_t>(index);
+            return true;
         }
-
-        for (size_t i = 0; i < p.states.size(); ++i)
-        {
-            plugin.setState(p.states[i].first.buffer(), p.states[i].second.buffer());
-        }
-
-        fActiveIndex = static_cast<int32_t>(index);
-        return true;
+        return false;
     }
 
     template <class PluginType>
@@ -719,12 +753,7 @@ public:
             p.setParameter(plugin.getParameterSymbol(i).buffer(), plugin.getParameterValue(i));
         }
 
-        const uint32_t stateCount = plugin.getStateCount();
-        for (uint32_t i = 0; i < stateCount; ++i)
-        {
-            const String& key = plugin.getStateKey(i);
-            p.setState(key.buffer(), plugin.getState(key.buffer()).buffer());
-        }
+        PresetDetail::tryCaptureStates(plugin, p, 0);
 
         return p;
     }

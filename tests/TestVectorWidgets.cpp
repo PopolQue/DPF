@@ -64,6 +64,40 @@ public:
     }
 };
 
+class DummyButtonCallback : public VectorButton::Callback
+{
+public:
+    int clickCount = 0;
+    int toggleCount = 0;
+    bool lastChecked = false;
+    int lastMouseButton = 0;
+
+    void vectorButtonClicked(VectorButton*, int mouseButton) override
+    {
+        clickCount++;
+        lastMouseButton = mouseButton;
+    }
+
+    void vectorButtonToggled(VectorButton*, bool checked) override
+    {
+        toggleCount++;
+        lastChecked = checked;
+    }
+};
+
+class DummyComboBoxCallback : public VectorComboBox::Callback
+{
+public:
+    int indexChangedCount = 0;
+    uint32_t lastIndex = 0;
+
+    void vectorComboBoxIndexChanged(VectorComboBox*, uint32_t index) override
+    {
+        indexChangedCount++;
+        lastIndex = index;
+    }
+};
+
 int main()
 {
     Application app(true);
@@ -174,6 +208,111 @@ int main()
         meter.setClipColor(Color(255, 0, 0));
 
         std::cout << "  ✓ VectorMeter stereo levels, linear/dB conversion, and ballistics decay verified" << std::endl;
+    }
+
+    std::cout << "--- Testing VectorButton Momentary & Toggle Modes ---" << std::endl;
+    {
+        VectorButton button(&container);
+        button.setSize(80, 28);
+        button.setLabel("Mute");
+
+        DummyButtonCallback cb;
+        button.setCallback(&cb);
+
+        // 1. Momentary mode
+        assert(button.getMode() == VectorButton::Momentary);
+        assert(!button.isToggled());
+        assert(button.getLabel() == "Mute");
+
+        // Styling
+        button.setCornerRadius(6.0f);
+        button.setFontSize(13.0f);
+        button.setHasLed(true);
+        button.setLedColor(Color(255, 60, 60));
+        assert(button.hasLed());
+        assert(!button.isLedActive());
+
+        button.setLedActive(true);
+        assert(button.isLedActive());
+
+        // 2. Toggle mode
+        button.setMode(VectorButton::Toggle);
+        assert(button.getMode() == VectorButton::Toggle);
+
+        button.setToggled(true, true);
+        assert(button.isToggled());
+        assert(cb.toggleCount == 1);
+        assert(cb.lastChecked == true);
+
+        button.setToggled(false, true);
+        assert(!button.isToggled());
+        assert(cb.toggleCount == 2);
+        assert(cb.lastChecked == false);
+
+        std::cout << "  ✓ VectorButton momentary/toggle, LED indicator, and callbacks verified" << std::endl;
+    }
+
+    std::cout << "--- Testing VectorComboBox Items & Keyboard Selection ---" << std::endl;
+    {
+        VectorComboBox combo(&container);
+        combo.setSize(120, 26);
+
+        DummyComboBoxCallback cb;
+        combo.setCallback(&cb);
+
+        assert(combo.getItemCount() == 0);
+        assert(combo.getCurrentIndex() == -1);
+
+        combo.addItem("Sine");
+        combo.addItem("Triangle");
+        combo.addItem("Sawtooth");
+        combo.addItem("Square");
+
+        assert(combo.getItemCount() == 4);
+        assert(combo.getCurrentIndex() == 0);
+        assert(combo.getCurrentItem() == "Sine");
+        assert(combo.getItem(2) == "Sawtooth");
+
+        // Selection
+        combo.setCurrentIndex(2, true);
+        assert(combo.getCurrentIndex() == 2);
+        assert(combo.getCurrentItem() == "Sawtooth");
+        assert(cb.indexChangedCount == 1);
+        assert(cb.lastIndex == 2);
+
+        // Open/Close
+        assert(!combo.isOpen());
+        combo.setOpen(true);
+        assert(combo.isOpen());
+
+        // Keyboard Navigation (Down / Up)
+        Widget::KeyboardEvent evDown;
+        evDown.press = true;
+        evDown.key = kKeyDown;
+        combo.onKeyboard(evDown);
+        assert(combo.getCurrentIndex() == 3);
+        assert(combo.getCurrentItem() == "Square");
+
+        Widget::KeyboardEvent evUp;
+        evUp.press = true;
+        evUp.key = kKeyUp;
+        combo.onKeyboard(evUp);
+        assert(combo.getCurrentIndex() == 2);
+        assert(combo.getCurrentItem() == "Sawtooth");
+
+        // Escape closes
+        Widget::KeyboardEvent evEsc;
+        evEsc.press = true;
+        evEsc.key = kKeyEscape;
+        combo.onKeyboard(evEsc);
+        assert(!combo.isOpen());
+
+        // Remove item
+        combo.removeItem(1); // removes Triangle
+        assert(combo.getItemCount() == 3);
+        assert(combo.getItem(1) == "Sawtooth");
+
+        std::cout << "  ✓ VectorComboBox items, dropdown open/close, and keyboard nav verified" << std::endl;
     }
 
     std::cout << "Modern Vector Widgets Unit Tests passed successfully!" << std::endl;

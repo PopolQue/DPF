@@ -191,6 +191,8 @@ struct Plugin::PrivateData {
     String   trackName;
     uint32_t trackColor;
 
+    std::vector<NoteExpressionEvent> noteExpressionEvents;
+
     PrivateData() noexcept
         : canRequestParameterValueChanges(d_nextCanRequestParameterValueChanges),
           isDummy(d_nextPluginIsDummy),
@@ -952,6 +954,18 @@ public:
         std::memcpy(&fData->timePosition, &timePosition, sizeof(TimePosition));
     }
 #endif
+
+    void clearNoteExpressionEvents() noexcept
+    {
+        if (fData != nullptr)
+            fData->noteExpressionEvents.clear();
+    }
+
+    void addNoteExpressionEvent(const NoteExpressionEvent& event)
+    {
+        if (fData != nullptr)
+            fData->noteExpressionEvents.push_back(event);
+    }
 
     // -------------------------------------------------------------------
 

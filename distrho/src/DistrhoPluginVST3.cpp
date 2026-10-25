@@ -1428,6 +1428,8 @@ public:
                                    data->symbolic_sample_size == V3_SAMPLE_64, V3_INVALID_ARG);
         // d_debug("process %i", data->symbolic_sample_size);
 
+        fPlugin.clearNoteExpressionEvents();
+
         // activate plugin if not done yet
         if (! fPlugin.isActive())
             fPlugin.activate();
@@ -1626,6 +1628,73 @@ public:
         fHostEventOutputHandle = data->output_events;
        #endif
 
+       #if !DISTRHO_PLUGIN_WANT_MIDI_INPUT
+        if (v3_event_list** const eventptr = data->input_events)
+        {
+            v3_event event;
+            for (uint32_t i = 0, count = v3_cpp_obj(eventptr)->get_event_count(eventptr); i < count; ++i)
+            {
+                if (v3_cpp_obj(eventptr)->get_event(eventptr, i, &event) != V3_OK)
+                    break;
+
+                if (event.type == V3_EVENT_NOTE_EXP_VALUE)
+                {
+                    NoteExpressionEvent noteExp{};
+                    noteExp.frame = static_cast<uint32_t>(std::max(0, event.sample_offset));
+                    noteExp.noteId = event.note_exp_value.note_id;
+                    noteExp.key = -1;
+                    noteExp.channel = -1;
+                    switch (event.note_exp_value.type_id)
+                    {
+                    case 0:
+                        noteExp.type = kNoteExpressionVolume;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 1:
+                        noteExp.type = kNoteExpressionPan;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 2:
+                        noteExp.type = kNoteExpressionTuning;
+                        noteExp.value = (event.note_exp_value.value - 0.5) * 240.0;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 3:
+                        noteExp.type = kNoteExpressionVibrato;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 4:
+                        noteExp.type = kNoteExpressionExpression;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 5:
+                        noteExp.type = kNoteExpressionBrightness;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if (event.type == V3_EVENT_POLY_PRESSURE)
+                {
+                    NoteExpressionEvent noteExp{};
+                    noteExp.frame = static_cast<uint32_t>(std::max(0, event.sample_offset));
+                    noteExp.noteId = event.poly_pressure.note_id;
+                    noteExp.key = event.poly_pressure.pitch;
+                    noteExp.channel = event.poly_pressure.channel;
+                    noteExp.type = kNoteExpressionPressure;
+                    noteExp.value = event.poly_pressure.pressure;
+                    fPlugin.addNoteExpressionEvent(noteExp);
+                }
+            }
+        }
+       #endif
+
       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
         bool canAppendMoreEvents = true;
         inputEventList.init();
@@ -1645,21 +1714,72 @@ public:
         }
        #endif
 
-        if (canAppendMoreEvents)
+        if (v3_event_list** const eventptr = data->input_events)
         {
-            if (v3_event_list** const eventptr = data->input_events)
+            v3_event event;
+            for (uint32_t i = 0, count = v3_cpp_obj(eventptr)->get_event_count(eventptr); i < count; ++i)
             {
-                v3_event event;
-                for (uint32_t i = 0, count = v3_cpp_obj(eventptr)->get_event_count(eventptr); i < count; ++i)
-                {
-                    if (v3_cpp_obj(eventptr)->get_event(eventptr, i, &event) != V3_OK)
-                        break;
+                if (v3_cpp_obj(eventptr)->get_event(eventptr, i, &event) != V3_OK)
+                    break;
 
-                    if (inputEventList.appendEvent(event))
+                if (event.type == V3_EVENT_NOTE_EXP_VALUE)
+                {
+                    NoteExpressionEvent noteExp{};
+                    noteExp.frame = static_cast<uint32_t>(std::max(0, event.sample_offset));
+                    noteExp.noteId = event.note_exp_value.note_id;
+                    noteExp.key = -1;
+                    noteExp.channel = -1;
+                    switch (event.note_exp_value.type_id)
                     {
-                        canAppendMoreEvents = false;
+                    case 0:
+                        noteExp.type = kNoteExpressionVolume;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 1:
+                        noteExp.type = kNoteExpressionPan;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 2:
+                        noteExp.type = kNoteExpressionTuning;
+                        noteExp.value = (event.note_exp_value.value - 0.5) * 240.0;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 3:
+                        noteExp.type = kNoteExpressionVibrato;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 4:
+                        noteExp.type = kNoteExpressionExpression;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    case 5:
+                        noteExp.type = kNoteExpressionBrightness;
+                        noteExp.value = event.note_exp_value.value;
+                        fPlugin.addNoteExpressionEvent(noteExp);
+                        break;
+                    default:
                         break;
                     }
+                }
+                else if (event.type == V3_EVENT_POLY_PRESSURE)
+                {
+                    NoteExpressionEvent noteExp{};
+                    noteExp.frame = static_cast<uint32_t>(std::max(0, event.sample_offset));
+                    noteExp.noteId = event.poly_pressure.note_id;
+                    noteExp.key = event.poly_pressure.pitch;
+                    noteExp.channel = event.poly_pressure.channel;
+                    noteExp.type = kNoteExpressionPressure;
+                    noteExp.value = event.poly_pressure.pressure;
+                    fPlugin.addNoteExpressionEvent(noteExp);
+                }
+
+                if (canAppendMoreEvents && inputEventList.appendEvent(event))
+                {
+                    canAppendMoreEvents = false;
                 }
             }
         }

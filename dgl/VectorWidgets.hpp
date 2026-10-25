@@ -20,5 +20,7 @@
 #include "widgets/VectorKnob.hpp"
 #include "widgets/VectorSlider.hpp"
 #include "widgets/VectorMeter.hpp"
+#include "widgets/VectorButton.hpp"
+#include "widgets/VectorComboBox.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

@@ -204,6 +204,18 @@ public:
     */
     uint32_t getTrackColor() const noexcept;
 
+   /**
+      Get the number of per-note expression events received in the current process block.
+      @note Only valid during run() / runDouble().
+    */
+    uint32_t getNoteExpressionEventCount() const noexcept;
+
+   /**
+      Get a per-note expression event by index.
+      @note Only valid during run() / runDouble().
+    */
+    const NoteExpressionEvent& getNoteExpressionEvent(uint32_t index) const noexcept;
+
 protected:
    /* --------------------------------------------------------------------------------------------------------
     * Information */

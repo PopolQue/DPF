@@ -22,7 +22,7 @@ endif
 # ---------------------------------------------------------------------------------------------------------------------
 
 MANUAL_TESTS  =
-UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units TestPresetManager TestDoublePrecision
+UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units TestPresetManager TestDoublePrecision TestCLAPPresetDiscovery TestNoteExpressions
 
 ifeq ($(HAVE_CAIRO),true)
 MANUAL_TESTS += Demo.cairo

@@ -62,6 +62,9 @@
 #include "clap/ext/thread-check.h"
 #include "clap/ext/timer-support.h"
 #include "clap/ext/track-info.h"
+#include "clap/ext/preset-load.h"
+#include "clap/factory/preset-discovery.h"
+#include "../extra/PresetManager.hpp"
 
 #if defined(DISTRHO_OS_MAC) || defined(DISTRHO_OS_WINDOWS)
 # define DPF_CLAP_USING_HOST_TIMER 0
@@ -848,6 +851,24 @@ public:
     // ----------------------------------------------------------------------------------------------------------------
     // core
 
+    PluginExporter& getPlugin() noexcept
+    {
+        return fPlugin;
+    }
+
+   #if DISTRHO_PLUGIN_WANT_PROGRAMS
+    uint32_t getProgramCount() const noexcept
+    {
+        return fPlugin.getProgramCount();
+    }
+
+    void loadProgram(const uint32_t index)
+    {
+        fCurrentProgram = index;
+        fPlugin.loadProgram(index);
+    }
+   #endif
+
     template <class T>
     const T* getHostExtension(const char* const extensionId) const
     {
@@ -906,6 +927,7 @@ public:
 
     bool process(const clap_process_t* const process)
     {
+        fPlugin.clearNoteExpressionEvents();
        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
         fMidiEventCount = 0;
        #endif
@@ -1059,7 +1081,47 @@ public:
                         break;
                     case CLAP_EVENT_NOTE_CHOKE:
                     case CLAP_EVENT_NOTE_END:
+                        break;
                     case CLAP_EVENT_NOTE_EXPRESSION:
+                        DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_note_expression_t),
+                                                        event->size, sizeof(clap_event_note_expression_t));
+                        {
+                            const clap_event_note_expression_t* const noteExpClap =
+                                reinterpret_cast<const clap_event_note_expression_t*>(event);
+                            NoteExpressionEvent noteExp{};
+                            noteExp.frame = (event->time < process->frames_count) ? event->time : (process->frames_count > 0 ? process->frames_count - 1 : 0);
+                            noteExp.key = noteExpClap->key;
+                            noteExp.channel = noteExpClap->channel;
+                            noteExp.noteId = noteExpClap->note_id;
+                            switch (noteExpClap->expression_id)
+                            {
+                            case CLAP_NOTE_EXPRESSION_VOLUME:
+                                noteExp.type = kNoteExpressionVolume;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_PAN:
+                                noteExp.type = kNoteExpressionPan;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_TUNING:
+                                noteExp.type = kNoteExpressionTuning;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_VIBRATO:
+                                noteExp.type = kNoteExpressionVibrato;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_EXPRESSION:
+                                noteExp.type = kNoteExpressionExpression;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_BRIGHTNESS:
+                                noteExp.type = kNoteExpressionBrightness;
+                                break;
+                            case CLAP_NOTE_EXPRESSION_PRESSURE:
+                                noteExp.type = kNoteExpressionPressure;
+                                break;
+                            default:
+                                continue;
+                            }
+                            noteExp.value = noteExpClap->value;
+                            fPlugin.addNoteExpressionEvent(noteExp);
+                        }
                         break;
                     case CLAP_EVENT_PARAM_VALUE:
                         DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_param_value_t),
@@ -2839,10 +2901,10 @@ static bool CLAP_ABI clap_plugin_note_ports_get(const clap_plugin_t*, uint32_t,
       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
         info->id = 0;
        #if DISTRHO_PLUGIN_WANT_MIDI_AS_MPE
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI_MPE;
        #else
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
        #endif
         std::strcpy(info->name, "Event/MIDI Input");
@@ -2854,10 +2916,10 @@ static bool CLAP_ABI clap_plugin_note_ports_get(const clap_plugin_t*, uint32_t,
       #if DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
         info->id = 0;
        #if DISTRHO_PLUGIN_WANT_MIDI_AS_MPE
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE | CLAP_NOTE_DIALECT_CLAP;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI_MPE;
        #else
-        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
+        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_CLAP;
         info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
        #endif
         std::strcpy(info->name, "Event/MIDI Output");
@@ -3077,8 +3139,56 @@ static clap_process_status CLAP_ABI clap_plugin_process(const clap_plugin_t* con
     return instance->process(process) ? CLAP_PROCESS_CONTINUE : CLAP_PROCESS_ERROR;
 }
 
+// --------------------------------------------------------------------------------------------------------------------
+// preset load
+
+static bool CLAP_ABI clap_plugin_preset_load_from_location(const clap_plugin_t* const plugin,
+                                                           const uint32_t location_kind,
+                                                           const char* const location,
+                                                           const char* const load_key)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    DISTRHO_SAFE_ASSERT_RETURN(instance != nullptr, false);
+    (void)load_key;
+
+    if (location_kind == CLAP_PRESET_DISCOVERY_LOCATION_FILE)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(location != nullptr && location[0] != '\0', false);
+        Preset preset;
+        if (preset.loadFromFile(location))
+        {
+            preset.applyToPlugin(instance->getPlugin());
+            return true;
+        }
+        return false;
+    }
+
+   #if DISTRHO_PLUGIN_WANT_PROGRAMS
+    if (location_kind == CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN)
+    {
+        uint32_t presetIndex = 0;
+        if (load_key != nullptr && load_key[0] != '\0')
+            presetIndex = static_cast<uint32_t>(std::atoi(load_key));
+        if (presetIndex < instance->getProgramCount())
+        {
+            instance->loadProgram(presetIndex);
+            return true;
+        }
+    }
+   #endif
+
+    return false;
+}
+
+static const clap_plugin_preset_load_t clap_plugin_preset_load = {
+    clap_plugin_preset_load_from_location
+};
+
 static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t*, const char* const id)
 {
+    if (std::strcmp(id, CLAP_EXT_PRESET_LOAD) == 0 ||
+        std::strcmp(id, CLAP_EXT_PRESET_LOAD_COMPAT) == 0)
+        return &clap_plugin_preset_load;
     if (std::strcmp(id, CLAP_EXT_PARAMS) == 0)
         return &clap_plugin_params;
     if (std::strcmp(id, CLAP_EXT_STATE) == 0)
@@ -3206,6 +3316,173 @@ static const clap_plugin_factory_t clap_plugin_factory = {
 };
 
 // --------------------------------------------------------------------------------------------------------------------
+// preset discovery provider
+
+static bool CLAP_ABI clap_preset_discovery_provider_init(const clap_preset_discovery_provider_t*,
+                                                         const clap_preset_discovery_indexer_t* const indexer)
+{
+    if (indexer == nullptr)
+        return false;
+
+    static const clap_preset_discovery_filetype_t sFileTypeDpf = {
+        "DPF Preset",
+        "DPF Preset File",
+        "dpfpreset"
+    };
+    indexer->declare_filetype(indexer, &sFileTypeDpf);
+
+    static const clap_preset_discovery_filetype_t sFileTypeJson = {
+        "JSON Preset",
+        "DPF JSON Preset File",
+        "json"
+    };
+    indexer->declare_filetype(indexer, &sFileTypeJson);
+
+   #if DISTRHO_PLUGIN_WANT_PROGRAMS
+    static const clap_preset_discovery_location_t sLocationPlugin = {
+        CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT,
+        DISTRHO_PLUGIN_NAME,
+        CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN,
+        DISTRHO_PLUGIN_CLAP_ID
+    };
+    indexer->declare_location(indexer, &sLocationPlugin);
+   #endif
+
+    return true;
+}
+
+static void CLAP_ABI clap_preset_discovery_provider_destroy(const clap_preset_discovery_provider_t*)
+{
+}
+
+static bool CLAP_ABI clap_preset_discovery_provider_get_metadata(const clap_preset_discovery_provider_t*,
+                                                                 const uint32_t location_kind,
+                                                                 const char* const location,
+                                                                 const clap_preset_discovery_metadata_receiver_t* const receiver)
+{
+    if (receiver == nullptr)
+        return false;
+
+    if (location_kind == CLAP_PRESET_DISCOVERY_LOCATION_FILE)
+    {
+        if (location == nullptr || location[0] == '\0')
+            return false;
+
+        Preset preset;
+        if (!preset.loadFromFile(location))
+            return false;
+
+        const char* const presetName = preset.name.isNotEmpty() ? preset.name.buffer() : "Unnamed Preset";
+        if (receiver->begin_preset != nullptr)
+            receiver->begin_preset(receiver, presetName, location);
+
+        if (receiver->set_flags != nullptr)
+            receiver->set_flags(receiver, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT);
+
+        if (preset.description.isNotEmpty() && receiver->set_description != nullptr)
+            receiver->set_description(receiver, preset.description.buffer());
+
+        if (preset.author.isNotEmpty() && receiver->add_creator != nullptr)
+            receiver->add_creator(receiver, preset.author.buffer());
+
+        if (receiver->add_tag != nullptr)
+        {
+            if (preset.category.isNotEmpty())
+                receiver->add_tag(receiver, preset.category.buffer());
+            if (preset.subCategory.isNotEmpty())
+                receiver->add_tag(receiver, preset.subCategory.buffer());
+            for (size_t t = 0; t < preset.tags.size(); ++t)
+                receiver->add_tag(receiver, preset.tags[t].buffer());
+        }
+
+        return true;
+    }
+
+   #if DISTRHO_PLUGIN_WANT_PROGRAMS
+    if (location_kind == CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN)
+    {
+        if (sPlugin != nullptr)
+        {
+            const uint32_t count = sPlugin->getProgramCount();
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const String& name = sPlugin->getProgramName(i);
+                char keyBuf[16];
+                std::snprintf(keyBuf, sizeof(keyBuf), "%u", i);
+
+                if (receiver->begin_preset != nullptr)
+                    receiver->begin_preset(receiver, name.buffer(), keyBuf);
+
+                if (receiver->set_flags != nullptr)
+                    receiver->set_flags(receiver, CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT);
+            }
+            return true;
+        }
+    }
+   #endif
+
+    return false;
+}
+
+static void* CLAP_ABI clap_preset_discovery_provider_get_extension(const clap_preset_discovery_provider_t*,
+                                                                   const char*)
+{
+    return nullptr;
+}
+
+static const clap_preset_discovery_provider_descriptor_t sPresetDiscoveryDesc = {
+    CLAP_VERSION,
+    DISTRHO_PLUGIN_CLAP_ID,
+    DISTRHO_PLUGIN_NAME,
+    DISTRHO_MACRO_AS_STRING(DISTRHO_PLUGIN_BRAND)
+};
+
+static const clap_preset_discovery_provider_t sPresetDiscoveryProvider = {
+    &sPresetDiscoveryDesc,
+    nullptr,
+    clap_preset_discovery_provider_init,
+    clap_preset_discovery_provider_destroy,
+    clap_preset_discovery_provider_get_metadata,
+    clap_preset_discovery_provider_get_extension
+};
+
+// --------------------------------------------------------------------------------------------------------------------
+// preset discovery factory
+
+static uint32_t CLAP_ABI clap_preset_discovery_factory_count(const clap_preset_discovery_factory_t*)
+{
+    return 1;
+}
+
+static const clap_preset_discovery_provider_descriptor_t* CLAP_ABI clap_preset_discovery_factory_get_descriptor(
+    const clap_preset_discovery_factory_t*, const uint32_t index)
+{
+    if (index == 0)
+        return &sPresetDiscoveryDesc;
+    return nullptr;
+}
+
+static const clap_preset_discovery_provider_t* CLAP_ABI clap_preset_discovery_factory_create(
+    const clap_preset_discovery_factory_t*,
+    const clap_preset_discovery_indexer_t* const indexer,
+    const char* const provider_id)
+{
+    if (provider_id != nullptr && std::strcmp(provider_id, DISTRHO_PLUGIN_CLAP_ID) == 0)
+    {
+        if (sPresetDiscoveryProvider.init != nullptr)
+            sPresetDiscoveryProvider.init(&sPresetDiscoveryProvider, indexer);
+        return &sPresetDiscoveryProvider;
+    }
+    return nullptr;
+}
+
+static const clap_preset_discovery_factory_t clap_preset_discovery_factory = {
+    clap_preset_discovery_factory_count,
+    clap_preset_discovery_factory_get_descriptor,
+    clap_preset_discovery_factory_create
+};
+
+// --------------------------------------------------------------------------------------------------------------------
 // plugin entry
 
 static bool CLAP_ABI clap_plugin_entry_init(const char* const plugin_path)
@@ -3245,6 +3522,9 @@ static const void* CLAP_ABI clap_plugin_entry_get_factory(const char* const fact
 {
     if (std::strcmp(factory_id, CLAP_PLUGIN_FACTORY_ID) == 0)
         return &clap_plugin_factory;
+    if (std::strcmp(factory_id, CLAP_PRESET_DISCOVERY_FACTORY_ID) == 0 ||
+        std::strcmp(factory_id, CLAP_PRESET_DISCOVERY_FACTORY_COMPAT_ID) == 0)
+        return &clap_preset_discovery_factory;
     return nullptr;
 }
 

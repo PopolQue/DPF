@@ -27,5 +27,7 @@
 #include "widgets/VectorTabGroup.hpp"
 #include "widgets/VectorSpectrum.hpp"
 #include "widgets/VectorTextEditor.hpp"
+#include "widgets/VectorXYPad.hpp"
+#include "widgets/VectorToggleSwitch.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

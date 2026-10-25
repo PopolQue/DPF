@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_METER_HPP_INCLUDED
 #define DGL_VECTOR_METER_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../NanoVG.hpp"
 
@@ -30,7 +31,8 @@ START_NAMESPACE_DGL
 /**
    Resolution-independent, customizable NanoVG vector audio level / peak meter.
  */
-class VectorMeter : public NanoSubWidget
+class VectorMeter : public NanoSubWidget,
+                    public AccessibleElement
 {
 public:
     enum Orientation {
@@ -60,6 +62,7 @@ public:
             fPeakDb[i] = fMinDb;
             fPeakHoldTimer[i] = 0.0f;
         }
+        initAccessibility();
     }
 
     explicit VectorMeter(NanoSubWidget* const parentWidget,
@@ -84,6 +87,7 @@ public:
             fPeakDb[i] = fMinDb;
             fPeakHoldTimer[i] = 0.0f;
         }
+        initAccessibility();
     }
 
     explicit VectorMeter(NanoTopLevelWidget* const parentWidget,
@@ -108,6 +112,7 @@ public:
             fPeakDb[i] = fMinDb;
             fPeakHoldTimer[i] = 0.0f;
         }
+        initAccessibility();
     }
 
     ~VectorMeter() override {}
@@ -151,6 +156,9 @@ public:
             fPeakDb[channel] = clamped;
             fPeakHoldTimer[channel] = fPeakHoldTime;
         }
+
+        if (channel == 0)
+            setAccessibleValue(clamped);
 
         repaint();
     }
@@ -349,6 +357,14 @@ private:
     Color fWarnColor;
     Color fClipColor;
     Color fPeakColor;
+
+    void initAccessibility()
+    {
+        setAccessibleRole(kAccessibleRoleIndicator);
+        setAccessibleLabel("Level Meter");
+        setAccessibleRange(fMinDb, fMaxDb);
+        setAccessibleValue(fLevelDb[0]);
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorMeter)
 };

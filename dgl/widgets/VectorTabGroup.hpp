@@ -17,6 +17,7 @@
 #ifndef DGL_VECTOR_TAB_GROUP_HPP_INCLUDED
 #define DGL_VECTOR_TAB_GROUP_HPP_INCLUDED
 
+#include "../Accessibility.hpp"
 #include "../Color.hpp"
 #include "../NanoVG.hpp"
 #include "../../distrho/extra/String.hpp"
@@ -31,7 +32,8 @@ START_NAMESPACE_DGL
    Resolution-independent, customizable NanoVG vector tab navigation bar.
    Supports multiple tabs, hover highlighting, active indicator pill/line, and keyboard navigation.
  */
-class VectorTabGroup : public NanoSubWidget
+class VectorTabGroup : public NanoSubWidget,
+                       public AccessibleElement
 {
 public:
     enum Style {
@@ -61,7 +63,9 @@ public:
           fFontSize(12.0f),
           fIndicatorThickness(3.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     explicit VectorTabGroup(NanoSubWidget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -78,7 +82,9 @@ public:
           fFontSize(12.0f),
           fIndicatorThickness(3.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     explicit VectorTabGroup(NanoTopLevelWidget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -95,7 +101,9 @@ public:
           fFontSize(12.0f),
           fIndicatorThickness(3.0f),
           fUserCallback(nullptr)
-    {}
+    {
+        initAccessibility();
+    }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Tab Management
@@ -133,6 +141,7 @@ public:
             return;
 
         fCurrentTab = index;
+        setAccessibleValue(static_cast<float>(fCurrentTab), getTabLabel(fCurrentTab).buffer());
         repaint();
 
         if (sendCallback && fUserCallback != nullptr)
@@ -374,6 +383,14 @@ private:
     float fFontSize;
     float fIndicatorThickness;
     Callback* fUserCallback;
+
+    void initAccessibility()
+    {
+        setAccessibleRole(kAccessibleRoleTab);
+        setAccessibleLabel("Tab Group");
+        setAccessibleRange(0.0f, static_cast<float>(fTabs.size()));
+        setAccessibleValue(static_cast<float>(fCurrentTab), getTabLabel(fCurrentTab).buffer());
+    }
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VectorTabGroup)
 };

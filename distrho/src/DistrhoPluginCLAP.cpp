@@ -55,6 +55,7 @@
 #include "clap/ext/latency.h"
 #include "clap/ext/gui.h"
 #include "clap/ext/note-ports.h"
+#include "clap/ext/note-name.h"
 #include "clap/ext/param-indication.h"
 #include "clap/ext/params.h"
 #include "clap/ext/remote-controls.h"
@@ -868,6 +869,27 @@ public:
         fPlugin.loadProgram(index);
     }
    #endif
+
+    uint32_t getNoteNameCount() const noexcept
+    {
+        return fPlugin.getNoteNameCount();
+    }
+
+    bool getNoteName(const uint32_t index, clap_note_name_t* const noteName) const noexcept
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(noteName != nullptr, false);
+
+        NoteName dNoteName{};
+        if (!fPlugin.getNoteName(index, dNoteName))
+            return false;
+
+        std::strncpy(noteName->name, dNoteName.name, CLAP_NAME_SIZE - 1);
+        noteName->name[CLAP_NAME_SIZE - 1] = '\0';
+        noteName->port = dNoteName.port;
+        noteName->channel = dNoteName.channel;
+        noteName->key = dNoteName.key;
+        return true;
+    }
 
     template <class T>
     const T* getHostExtension(const char* const extensionId) const
@@ -3184,11 +3206,40 @@ static const clap_plugin_preset_load_t clap_plugin_preset_load = {
     clap_plugin_preset_load_from_location
 };
 
-static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t*, const char* const id)
+// --------------------------------------------------------------------------------------------------------------------
+// note name
+
+static uint32_t CLAP_ABI clap_plugin_note_name_count(const clap_plugin_t* const plugin)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->getNoteNameCount();
+}
+
+static bool CLAP_ABI clap_plugin_note_name_get(const clap_plugin_t* const plugin,
+                                               const uint32_t index,
+                                               clap_note_name_t* const note_name)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->getNoteName(index, note_name);
+}
+
+static const clap_plugin_note_name_t clap_plugin_note_name = {
+    clap_plugin_note_name_count,
+    clap_plugin_note_name_get
+};
+
+static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t* const plugin, const char* const id)
 {
     if (std::strcmp(id, CLAP_EXT_PRESET_LOAD) == 0 ||
         std::strcmp(id, CLAP_EXT_PRESET_LOAD_COMPAT) == 0)
         return &clap_plugin_preset_load;
+    if (std::strcmp(id, CLAP_EXT_NOTE_NAME) == 0 ||
+        std::strcmp(id, CLAP_EXT_NOTE_NAME_COMPAT) == 0)
+    {
+        PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+        if (instance->getNoteNameCount() > 0)
+            return &clap_plugin_note_name;
+    }
     if (std::strcmp(id, CLAP_EXT_PARAMS) == 0)
         return &clap_plugin_params;
     if (std::strcmp(id, CLAP_EXT_STATE) == 0)

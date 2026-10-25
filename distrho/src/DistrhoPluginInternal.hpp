@@ -967,6 +967,18 @@ public:
             fData->noteExpressionEvents.push_back(event);
     }
 
+    uint32_t getNoteNameCount() const
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, 0);
+        return fPlugin->getNoteNameCount();
+    }
+
+    bool getNoteName(const uint32_t index, NoteName& noteName) const
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fPlugin != nullptr, false);
+        return fPlugin->getNoteName(index, noteName);
+    }
+
     // -------------------------------------------------------------------
 
     bool isActive() const noexcept

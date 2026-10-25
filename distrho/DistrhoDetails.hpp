@@ -973,6 +973,40 @@ struct NoteExpressionEvent {
 };
 
 /**
+   Custom note name (for drum machines, percussion maps, or synthesizer key mappings).
+ */
+struct NoteName {
+    char    name[64];    ///< Display name of the note (e.g. "Kick", "Snare", "Closed Hat")
+    int16_t port;        ///< Port index (-1 for any port)
+    int16_t channel;     ///< Channel index 0-15 (-1 for any channel)
+    int16_t key;         ///< MIDI key index 0-127 (-1 for any key)
+
+    NoteName() noexcept
+        : port(-1),
+          channel(-1),
+          key(-1)
+    {
+        name[0] = '\0';
+    }
+
+    NoteName(const char* const n, const int16_t k, const int16_t ch = -1, const int16_t p = -1) noexcept
+        : port(p),
+          channel(ch),
+          key(k)
+    {
+        if (n != nullptr)
+        {
+            std::strncpy(name, n, sizeof(name) - 1);
+            name[sizeof(name) - 1] = '\0';
+        }
+        else
+        {
+            name[0] = '\0';
+        }
+    }
+};
+
+/**
    Time position.@n
    The @a playing and @a frame values are always valid.@n
    BBT values are only valid when @a bbt.valid is true.

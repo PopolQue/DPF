@@ -22,7 +22,7 @@ endif
 # ---------------------------------------------------------------------------------------------------------------------
 
 MANUAL_TESTS  =
-UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units TestPresetManager TestDoublePrecision TestCLAPPresetDiscovery TestNoteExpressions
+UNIT_TESTS    = Color Point TestTelemetry TestBlockSlicing TestCLAPExtensions TestVST3Units TestPresetManager TestDoublePrecision TestCLAPPresetDiscovery TestNoteExpressions TestCLAPNoteNames
 
 ifeq ($(HAVE_CAIRO),true)
 MANUAL_TESTS += Demo.cairo
@@ -43,6 +43,7 @@ endif
 ifeq ($(HAVE_OPENGL),true)
 UNIT_TESTS   += Window.opengl
 UNIT_TESTS   += TestVectorWidgets
+UNIT_TESTS   += TestVectorScopeAndTabs
 endif
 ifeq ($(HAVE_STUB),true)
 UNIT_TESTS   += Window.stub
@@ -185,9 +186,13 @@ clean:
 	@echo "Linking TestVectorWidgets (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestVectorScopeAndTabs$(APP_EXT): ../build/tests/TestVectorScopeAndTabs.cpp.o ../build/libdgl-opengl.a
+	@echo "Linking TestVectorScopeAndTabs (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs
 
 -include $(ALL_OBJS:%.o=%.d)
 

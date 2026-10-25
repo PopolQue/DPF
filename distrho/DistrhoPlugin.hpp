@@ -334,6 +334,20 @@ protected:
     */
     virtual void initPortGroup(uint32_t groupId, PortGroup& portGroup);
 
+   /**
+      Get the number of custom note names (e.g. for drum maps or synthesizer key mappings).
+      Override this if your plugin provides custom note names.
+    */
+    virtual uint32_t getNoteNameCount() const;
+
+   /**
+      Get note name information by index.
+      @param index The note name index [0 .. getNoteNameCount() - 1].
+      @param noteName Output structure to fill with note name, port, channel, and key.
+      @return True on success, false if index is invalid.
+    */
+    virtual bool getNoteName(uint32_t index, NoteName& noteName) const;
+
 #if DISTRHO_PLUGIN_WANT_PROGRAMS
    /**
       Set the name of the program @a index.@n

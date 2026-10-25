@@ -217,6 +217,16 @@ void Plugin::initPortGroup(const uint32_t groupId, PortGroup& portGroup)
     fillInPredefinedPortGroupData(groupId, portGroup);
 }
 
+uint32_t Plugin::getNoteNameCount() const
+{
+    return 0;
+}
+
+bool Plugin::getNoteName(const uint32_t, NoteName&) const
+{
+    return false;
+}
+
 #if DISTRHO_PLUGIN_WANT_PROGRAMS
 void Plugin::initProgramName(uint32_t, String&) {}
 #endif

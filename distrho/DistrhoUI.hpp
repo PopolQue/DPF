@@ -259,6 +259,24 @@ protected:
     virtual void uiTelemetryReceived(uint32_t tag, const void* data, uint32_t size);
 
    /**
+      Track info changed function, called when the host provides or updates the track name and color.
+      @param name The track name, or empty string if not provided.
+      @param colorRGBA The track color in 0xRRGGBBAA format, or 0 if not provided.
+      The default implementation does nothing.
+    */
+    virtual void uiTrackInfoChanged(const char* name, uint32_t colorRGBA);
+
+   /**
+      Parameter indication function, called when the host maps a parameter to hardware or automation.
+      @param index The parameter index.
+      @param hasMapping Whether the parameter is currently mapped to a hardware controller.
+      @param colorRGBA The indication color in 0xRRGGBBAA format, or 0 if not specified.
+      @param label Optional display label assigned by the controller, or empty string.
+      The default implementation does nothing.
+    */
+    virtual void uiParamIndicationChanged(uint32_t index, bool hasMapping, uint32_t colorRGBA, const char* label);
+
+   /**
       UI idle function, called to give idle time to the plugin UI directly from the host.
       This is called right after OS event handling and Window idle events (within the same cycle).
       There are no guarantees in terms of timing.

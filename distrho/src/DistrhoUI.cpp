@@ -560,6 +560,14 @@ void UI::uiTelemetryReceived(uint32_t, const void*, uint32_t)
 {
 }
 
+void UI::uiTrackInfoChanged(const char*, uint32_t)
+{
+}
+
+void UI::uiParamIndicationChanged(uint32_t, bool, uint32_t, const char*)
+{
+}
+
 void UI::uiFocus(bool, DGL_NAMESPACE::CrossingMode)
 {
 }

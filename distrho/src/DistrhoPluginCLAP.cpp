@@ -50,14 +50,18 @@
 
 #include "clap/entry.h"
 #include "clap/plugin-factory.h"
+#include "clap/color.h"
 #include "clap/ext/audio-ports.h"
 #include "clap/ext/latency.h"
 #include "clap/ext/gui.h"
 #include "clap/ext/note-ports.h"
+#include "clap/ext/param-indication.h"
 #include "clap/ext/params.h"
+#include "clap/ext/remote-controls.h"
 #include "clap/ext/state.h"
 #include "clap/ext/thread-check.h"
 #include "clap/ext/timer-support.h"
+#include "clap/ext/track-info.h"
 
 #if defined(DISTRHO_OS_MAC) || defined(DISTRHO_OS_WINDOWS)
 # define DPF_CLAP_USING_HOST_TIMER 0
@@ -532,6 +536,18 @@ public:
     }
    #endif
 
+    void notifyTrackInfo(const char* const name, const uint32_t colorRGBA)
+    {
+        if (UIExporter* const ui = fUI.get())
+            ui->notifyTrackInfoChanged(name, colorRGBA);
+    }
+
+    void notifyParamIndication(const uint32_t index, const bool hasMapping, const uint32_t colorRGBA, const char* const label)
+    {
+        if (UIExporter* const ui = fUI.get())
+            ui->notifyParamIndicationChanged(index, hasMapping, colorRGBA, label);
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
 
 private:
@@ -621,6 +637,9 @@ private:
             fCachedParameters.changed[i] = false;
             fUI->parameterChanged(i, value);
         }
+
+        if (fPlugin.getTrackName() != nullptr && (fPlugin.getTrackName()[0] != '\0' || fPlugin.getTrackColor() != 0))
+            fUI->notifyTrackInfoChanged(fPlugin.getTrackName(), fPlugin.getTrackColor());
 
         if (fIsFloating)
         {
@@ -741,6 +760,14 @@ static constexpr const requestParameterValueChangeFunc requestParameterValueChan
 static constexpr const updateStateValueFunc updateStateValueCallback = nullptr;
 #endif
 
+static inline uint32_t clapColorToRGBA(const clap_color_t& color) noexcept
+{
+    return (static_cast<uint32_t>(color.red) << 24)
+         | (static_cast<uint32_t>(color.green) << 16)
+         | (static_cast<uint32_t>(color.blue) << 8)
+         | static_cast<uint32_t>(color.alpha);
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -804,6 +831,8 @@ public:
        #if DISTRHO_PLUGIN_NUM_INPUTS != 0 && DISTRHO_PLUGIN_NUM_OUTPUTS != 0
         fillInBusInfoPairs();
        #endif
+
+        fillInRemoteControlPages();
     }
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -820,7 +849,11 @@ public:
         if (!clap_version_is_compatible(fHost->clap_version))
             return false;
 
-        return fHostExtensions.init();
+        if (!fHostExtensions.init())
+            return false;
+
+        trackInfoChanged();
+        return true;
     }
 
     void activate(const double sampleRate, const uint32_t maxFramesCount)
@@ -828,6 +861,7 @@ public:
         fPlugin.setSampleRate(sampleRate, true);
         fPlugin.setBufferSize(maxFramesCount, true);
         fPlugin.activate();
+        trackInfoChanged();
     }
 
     void deactivate()
@@ -1956,6 +1990,8 @@ private:
         const clap_host_latency_t* latency;
         const clap_host_thread_check_t* threadCheck;
        #endif
+        const clap_host_remote_controls_t* remoteControls;
+        const clap_host_track_info_t* trackInfo;
 
         HostExtensions(const clap_host_t* const host)
             : host(host),
@@ -1964,6 +2000,8 @@ private:
             , latency(nullptr)
             , threadCheck(nullptr)
            #endif
+            , remoteControls(nullptr)
+            , trackInfo(nullptr)
         {}
 
         bool init()
@@ -1975,6 +2013,8 @@ private:
             latency = static_cast<const clap_host_latency_t*>(host->get_extension(host, CLAP_EXT_LATENCY));
             threadCheck = static_cast<const clap_host_thread_check_t*>(host->get_extension(host, CLAP_EXT_THREAD_CHECK));
            #endif
+            remoteControls = static_cast<const clap_host_remote_controls_t*>(host->get_extension(host, CLAP_EXT_REMOTE_CONTROLS));
+            trackInfo = static_cast<const clap_host_track_info_t*>(host->get_extension(host, CLAP_EXT_TRACK_INFO));
             return true;
         }
     } fHostExtensions;
@@ -2190,6 +2230,254 @@ private:
         return static_cast<PluginCLAP*>(ptr)->updateState(key, value);
     }
    #endif
+
+public:
+    // ----------------------------------------------------------------------------------------------------------------
+    // remote controls
+
+    struct RemoteControlPage {
+        clap_id page_id;
+        clap_id section_name_id;
+        char page_name[CLAP_NAME_SIZE];
+        clap_id param_ids[CLAP_REMOTE_CONTROLS_COUNT];
+    };
+    std::vector<RemoteControlPage> fRemoteControlPages;
+
+    void fillInRemoteControlPages()
+    {
+        fRemoteControlPages.clear();
+        clap_id nextPageId = 0;
+
+        const uint32_t portGroupCount = fPlugin.getPortGroupCount();
+        const uint32_t paramCount = fPlugin.getParameterCount();
+
+        if (portGroupCount > 0)
+        {
+            for (uint32_t g = 0; g < portGroupCount; ++g)
+            {
+                const PortGroupWithId& group(fPlugin.getPortGroupByIndex(g));
+                std::vector<uint32_t> groupParams;
+                for (uint32_t p = 0; p < paramCount; ++p)
+                {
+                    if (fPlugin.getParameterGroupId(p) == group.groupId)
+                    {
+                        const uint32_t hints = fPlugin.getParameterHints(p);
+                        if ((hints & kParameterIsOutput) == 0)
+                            groupParams.push_back(p);
+                    }
+                }
+
+                if (groupParams.empty())
+                    continue;
+
+                const uint32_t numChunks = (static_cast<uint32_t>(groupParams.size()) + CLAP_REMOTE_CONTROLS_COUNT - 1) / CLAP_REMOTE_CONTROLS_COUNT;
+                for (uint32_t c = 0; c < numChunks; ++c)
+                {
+                    RemoteControlPage page;
+                    std::memset(&page, 0, sizeof(page));
+                    page.page_id = nextPageId++;
+                    page.section_name_id = group.groupId + 1;
+
+                    if (numChunks == 1)
+                    {
+                        d_strncpy(page.page_name, group.name.buffer(), CLAP_NAME_SIZE);
+                    }
+                    else
+                    {
+                        char nameBuf[CLAP_NAME_SIZE];
+                        snprintf(nameBuf, sizeof(nameBuf), "%s %u", group.name.buffer(), c + 1);
+                        d_strncpy(page.page_name, nameBuf, CLAP_NAME_SIZE);
+                    }
+
+                    for (uint32_t i = 0; i < CLAP_REMOTE_CONTROLS_COUNT; ++i)
+                    {
+                        const uint32_t paramIndex = c * CLAP_REMOTE_CONTROLS_COUNT + i;
+                        if (paramIndex < groupParams.size())
+                            page.param_ids[i] = groupParams[paramIndex];
+                        else
+                            page.param_ids[i] = CLAP_INVALID_ID;
+                    }
+
+                    fRemoteControlPages.push_back(page);
+                }
+            }
+
+            // Also check for ungrouped parameters
+            std::vector<uint32_t> ungroupedParams;
+            for (uint32_t p = 0; p < paramCount; ++p)
+            {
+                if (fPlugin.getParameterGroupId(p) == kPortGroupNone)
+                {
+                    const uint32_t hints = fPlugin.getParameterHints(p);
+                    if ((hints & kParameterIsOutput) == 0)
+                        ungroupedParams.push_back(p);
+                }
+            }
+
+            if (! ungroupedParams.empty())
+            {
+                const uint32_t numChunks = (static_cast<uint32_t>(ungroupedParams.size()) + CLAP_REMOTE_CONTROLS_COUNT - 1) / CLAP_REMOTE_CONTROLS_COUNT;
+                for (uint32_t c = 0; c < numChunks; ++c)
+                {
+                    RemoteControlPage page;
+                    std::memset(&page, 0, sizeof(page));
+                    page.page_id = nextPageId++;
+                    page.section_name_id = CLAP_INVALID_ID;
+
+                    if (numChunks == 1)
+                    {
+                        d_strncpy(page.page_name, "General", CLAP_NAME_SIZE);
+                    }
+                    else
+                    {
+                        char nameBuf[CLAP_NAME_SIZE];
+                        snprintf(nameBuf, sizeof(nameBuf), "General %u", c + 1);
+                        d_strncpy(page.page_name, nameBuf, CLAP_NAME_SIZE);
+                    }
+
+                    for (uint32_t i = 0; i < CLAP_REMOTE_CONTROLS_COUNT; ++i)
+                    {
+                        const uint32_t paramIndex = c * CLAP_REMOTE_CONTROLS_COUNT + i;
+                        if (paramIndex < ungroupedParams.size())
+                            page.param_ids[i] = ungroupedParams[paramIndex];
+                        else
+                            page.param_ids[i] = CLAP_INVALID_ID;
+                    }
+
+                    fRemoteControlPages.push_back(page);
+                }
+            }
+        }
+        else if (paramCount > 0)
+        {
+            std::vector<uint32_t> validParams;
+            for (uint32_t p = 0; p < paramCount; ++p)
+            {
+                const uint32_t hints = fPlugin.getParameterHints(p);
+                if ((hints & kParameterIsOutput) == 0)
+                    validParams.push_back(p);
+            }
+
+            if (! validParams.empty())
+            {
+                const uint32_t numChunks = (static_cast<uint32_t>(validParams.size()) + CLAP_REMOTE_CONTROLS_COUNT - 1) / CLAP_REMOTE_CONTROLS_COUNT;
+                for (uint32_t c = 0; c < numChunks; ++c)
+                {
+                    RemoteControlPage page;
+                    std::memset(&page, 0, sizeof(page));
+                    page.page_id = nextPageId++;
+                    page.section_name_id = CLAP_INVALID_ID;
+
+                    char nameBuf[CLAP_NAME_SIZE];
+                    snprintf(nameBuf, sizeof(nameBuf), "Page %u", c + 1);
+                    d_strncpy(page.page_name, nameBuf, CLAP_NAME_SIZE);
+
+                    for (uint32_t i = 0; i < CLAP_REMOTE_CONTROLS_COUNT; ++i)
+                    {
+                        const uint32_t paramIndex = c * CLAP_REMOTE_CONTROLS_COUNT + i;
+                        if (paramIndex < validParams.size())
+                            page.param_ids[i] = validParams[paramIndex];
+                        else
+                            page.param_ids[i] = CLAP_INVALID_ID;
+                    }
+
+                    fRemoteControlPages.push_back(page);
+                }
+            }
+        }
+    }
+
+    uint32_t remoteControlsCount() const noexcept
+    {
+        return static_cast<uint32_t>(fRemoteControlPages.size());
+    }
+
+    bool remoteControlsGet(const uint32_t page_index, clap_remote_controls_page_t* const page) const noexcept
+    {
+        if (page_index >= fRemoteControlPages.size() || page == nullptr)
+            return false;
+
+        const RemoteControlPage& p = fRemoteControlPages[page_index];
+        page->page_id = p.page_id;
+        page->section_name_id = p.section_name_id;
+        page->is_for_context = false;
+        d_strncpy(page->page_name, p.page_name, CLAP_NAME_SIZE);
+        for (uint32_t i = 0; i < CLAP_REMOTE_CONTROLS_COUNT; ++i)
+            page->param_ids[i] = p.param_ids[i];
+
+        return true;
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // param indication
+
+    void paramIndicationSetMapping(const clap_id param_id,
+                                   const bool has_mapping,
+                                   const clap_color_t* const color,
+                                   const char* const label,
+                                   const char* const /*description*/)
+    {
+       #if DISTRHO_PLUGIN_HAS_UI
+        if (ClapUI* const ui = getUI())
+        {
+            const uint32_t colorRGBA = (color != nullptr) ? clapColorToRGBA(*color) : 0;
+            ui->notifyParamIndication(param_id, has_mapping, colorRGBA, label != nullptr ? label : "");
+        }
+       #else
+        d_unused(param_id);
+        d_unused(has_mapping);
+        d_unused(color);
+        d_unused(label);
+       #endif
+    }
+
+    void paramIndicationSetAutomation(const clap_id param_id,
+                                     const uint32_t automation_state,
+                                     const clap_color_t* const color)
+    {
+       #if DISTRHO_PLUGIN_HAS_UI
+        if (ClapUI* const ui = getUI())
+        {
+            const uint32_t colorRGBA = (color != nullptr) ? clapColorToRGBA(*color) : 0;
+            ui->notifyParamIndication(param_id, automation_state != 0, colorRGBA, "");
+        }
+       #else
+        d_unused(param_id);
+        d_unused(automation_state);
+        d_unused(color);
+       #endif
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // track info
+
+    void trackInfoChanged()
+    {
+        if (fHostExtensions.trackInfo == nullptr || fHostExtensions.trackInfo->get == nullptr)
+            return;
+
+        clap_track_info_t info;
+        std::memset(&info, 0, sizeof(info));
+
+        if (! fHostExtensions.trackInfo->get(fHost, &info))
+            return;
+
+        const char* name = "";
+        uint32_t colorRGBA = 0;
+
+        if (info.flags & CLAP_TRACK_INFO_HAS_TRACK_NAME)
+            name = info.name;
+
+        if (info.flags & CLAP_TRACK_INFO_HAS_TRACK_COLOR)
+            colorRGBA = clapColorToRGBA(info.color);
+
+        fPlugin.setTrackInfo(name, colorRGBA);
+
+       #if DISTRHO_PLUGIN_HAS_UI
+        if (ClapUI* const ui = getUI())
+            ui->notifyTrackInfo(name, colorRGBA);
+       #endif
+    }
 };
 
 // --------------------------------------------------------------------------------------------------------------------
@@ -2545,6 +2833,69 @@ static const clap_plugin_state_t clap_plugin_state = {
 };
 
 // --------------------------------------------------------------------------------------------------------------------
+// plugin remote controls
+
+static uint32_t CLAP_ABI clap_plugin_remote_controls_count(const clap_plugin_t* const plugin)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->remoteControlsCount();
+}
+
+static bool CLAP_ABI clap_plugin_remote_controls_get(const clap_plugin_t* const plugin,
+                                                     const uint32_t page_index,
+                                                     clap_remote_controls_page_t* const page)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    return instance->remoteControlsGet(page_index, page);
+}
+
+static const clap_plugin_remote_controls_t clap_plugin_remote_controls = {
+    clap_plugin_remote_controls_count,
+    clap_plugin_remote_controls_get
+};
+
+// --------------------------------------------------------------------------------------------------------------------
+// plugin param indication
+
+static void CLAP_ABI clap_plugin_param_indication_set_mapping(const clap_plugin_t* const plugin,
+                                                              const clap_id param_id,
+                                                              const bool has_mapping,
+                                                              const clap_color_t* const color,
+                                                              const char* const label,
+                                                              const char* const description)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    instance->paramIndicationSetMapping(param_id, has_mapping, color, label, description);
+}
+
+static void CLAP_ABI clap_plugin_param_indication_set_automation(const clap_plugin_t* const plugin,
+                                                                 const clap_id param_id,
+                                                                 const uint32_t automation_state,
+                                                                 const clap_color_t* const color)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    instance->paramIndicationSetAutomation(param_id, automation_state, color);
+}
+
+static const clap_plugin_param_indication_t clap_plugin_param_indication = {
+    clap_plugin_param_indication_set_mapping,
+    clap_plugin_param_indication_set_automation
+};
+
+// --------------------------------------------------------------------------------------------------------------------
+// plugin track info
+
+static void CLAP_ABI clap_plugin_track_info_changed(const clap_plugin_t* const plugin)
+{
+    PluginCLAP* const instance = static_cast<PluginCLAP*>(plugin->plugin_data);
+    instance->trackInfoChanged();
+}
+
+static const clap_plugin_track_info_t clap_plugin_track_info = {
+    clap_plugin_track_info_changed
+};
+
+// --------------------------------------------------------------------------------------------------------------------
 // plugin
 
 static bool CLAP_ABI clap_plugin_init(const clap_plugin_t* const plugin)
@@ -2607,6 +2958,12 @@ static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t*, cons
         return &clap_plugin_params;
     if (std::strcmp(id, CLAP_EXT_STATE) == 0)
         return &clap_plugin_state;
+    if (std::strcmp(id, CLAP_EXT_REMOTE_CONTROLS) == 0)
+        return &clap_plugin_remote_controls;
+    if (std::strcmp(id, CLAP_EXT_PARAM_INDICATION) == 0)
+        return &clap_plugin_param_indication;
+    if (std::strcmp(id, CLAP_EXT_TRACK_INFO) == 0)
+        return &clap_plugin_track_info;
    #if DISTRHO_PLUGIN_NUM_INPUTS+DISTRHO_PLUGIN_NUM_OUTPUTS != 0
     if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS) == 0)
         return &clap_plugin_audio_ports;

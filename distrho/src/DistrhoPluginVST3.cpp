@@ -55,6 +55,7 @@
 #include "travesty/edit_controller.h"
 #include "travesty/factory.h"
 #include "travesty/host.h"
+#include "travesty/unit.h"
 
 #include <map>
 #include <string>
@@ -770,6 +771,11 @@ public:
         return fPlugin.getSampleRate();
     }
 
+    const PluginExporter& getPlugin() const noexcept
+    {
+        return fPlugin;
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // v3_component interface calls
 
@@ -1285,7 +1291,7 @@ public:
        #if DISTRHO_PLUGIN_NUM_INPUTS > 0
         DISTRHO_SAFE_ASSERT_RETURN(numInputs >= 0, V3_INVALID_ARG);
         if (!setAudioBusArrangement<true>(inputs, static_cast<uint32_t>(numInputs)))
-            return V3_INTERNAL_ERR;
+            return V3_FALSE;
        #else
         DISTRHO_SAFE_ASSERT_RETURN(numInputs == 0, V3_INVALID_ARG);
         // unused
@@ -1295,7 +1301,7 @@ public:
        #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
         DISTRHO_SAFE_ASSERT_RETURN(numOutputs >= 0, V3_INVALID_ARG);
         if (!setAudioBusArrangement<false>(outputs, static_cast<uint32_t>(numOutputs)))
-            return V3_INTERNAL_ERR;
+            return V3_FALSE;
        #else
         DISTRHO_SAFE_ASSERT_RETURN(numOutputs == 0, V3_INVALID_ARG);
         // unused
@@ -1851,7 +1857,8 @@ public:
         info->flags = flags;
         info->step_count = step_count;
         info->default_normalised_value = ranges.getNormalizedValue(ranges.def);
-        // int32_t unit_id;
+        const uint32_t groupId = fPlugin.getParameterGroupId(index);
+        info->unit_id = (groupId != kPortGroupNone) ? static_cast<int32_t>(groupId + 1) : 0;
         strncpy_utf16(info->title,       fPlugin.getParameterName(index), 128);
         strncpy_utf16(info->short_title, fPlugin.getParameterShortName(index), 128);
         strncpy_utf16(info->units,       fPlugin.getParameterUnit(index), 128);
@@ -2859,23 +2866,52 @@ private:
     {
         constexpr const uint32_t numPorts = isInput ? DISTRHO_PLUGIN_NUM_INPUTS : DISTRHO_PLUGIN_NUM_OUTPUTS;
         const BusInfo& busInfo(isInput ? inputBuses : outputBuses);
+        const bool* const enabledPorts = isInput
+                                #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+                                 ? fEnabledInputs
+                                #else
+                                 ? nullptr
+                                #endif
+                                #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+                                 : fEnabledOutputs;
+                                #else
+                                 : nullptr;
+                                #endif
+
+        uint32_t activePortCount = 0;
+        uint32_t totalPortCount = 0;
+        uint32_t portGroupId = kPortGroupNone;
 
         for (uint32_t i=0; i<numPorts; ++i)
         {
             const AudioPortWithBusId& port(fPlugin.getAudioPort(isInput, i));
 
             if (port.busId != busId)
-            {
-                // d_debug("port.busId != busId: %d %d", port.busId, busId);
                 continue;
-            }
 
-            *speaker = getSpeakerArrangementForAudioPort<isInput>(busInfo, port.groupId, busId);
-            // d_debug("getAudioBusArrangement %d enabled by value %lx", busId, *speaker);
+            portGroupId = port.groupId;
+            totalPortCount++;
+            if (enabledPorts != nullptr && enabledPorts[i])
+                activePortCount++;
+        }
+
+        if (totalPortCount == 0)
+            return false;
+
+        if (enabledPorts != nullptr && activePortCount == 0)
+        {
+            *speaker = 0;
             return true;
         }
 
-        return false;
+        if (activePortCount == 1 && totalPortCount > 1)
+        {
+            *speaker = V3_SPEAKER_M;
+            return true;
+        }
+
+        *speaker = getSpeakerArrangementForAudioPort<isInput>(busInfo, portGroupId, busId);
+        return true;
     }
 
     template<bool isInput>
@@ -2916,15 +2952,29 @@ private:
                 // get the only valid speaker arrangement for this bus, assuming enabled
                 const v3_speaker_arrangement earr = getSpeakerArrangementForAudioPort<isInput>(busInfo, port.groupId, busId);
 
-                // fail if host tries to map it to anything else
-                // FIXME should we allow to map speaker to zero as a way to disable it?
-                if (earr != arr /* && arr != 0 */)
+                // Allow disabling the bus (arr == 0)
+                if (arr == 0)
                 {
-                    ok = false;
+                    enabledPorts[i] = false;
                     continue;
                 }
 
-                enabledPorts[i] = arr != 0;
+                // If exact match
+                if (earr == arr)
+                {
+                    enabledPorts[i] = true;
+                    continue;
+                }
+
+                // Allow mono fallback on stereo bus
+                if (earr == (V3_SPEAKER_L | V3_SPEAKER_R) && arr == V3_SPEAKER_M)
+                {
+                    enabledPorts[i] = (i % 2 == 0);
+                    continue;
+                }
+
+                // fail if host tries to map it to anything else
+                ok = false;
             }
         }
 
@@ -3532,6 +3582,159 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
    #endif
     v3_host_application** hostApplicationFromInitialize;
 
+    struct dpf_unit_information : v3_unit_information_cpp {
+        dpf_edit_controller* controller;
+
+        dpf_unit_information()
+            : controller(nullptr)
+        {
+            query_interface = query_interface_unit_information;
+            ref = ref_unit_information;
+            unref = unref_unit_information;
+
+            unit.get_unit_count = get_unit_count;
+            unit.get_unit_info = get_unit_info;
+            unit.get_program_list_count = get_program_list_count;
+            unit.get_program_list_info = get_program_list_info;
+            unit.get_program_name = get_program_name;
+            unit.get_program_info = get_program_info;
+            unit.has_program_pitch_names = has_program_pitch_names;
+            unit.get_program_pitch_name = get_program_pitch_name;
+            unit.get_selected_unit = get_selected_unit;
+            unit.select_unit = select_unit;
+            unit.get_unit_by_bus = get_unit_by_bus;
+            unit.set_unit_program_data = set_unit_program_data;
+        }
+
+        static v3_result V3_API query_interface_unit_information(void* const self, const v3_tuid iid, void** const iface)
+        {
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (v3_tuid_match(iid, v3_funknown_iid) ||
+                v3_tuid_match(iid, v3_unit_information_iid))
+            {
+                *iface = self;
+                if (uinfo->controller != nullptr)
+                    ++uinfo->controller->refcounter;
+                return V3_OK;
+            }
+            *iface = nullptr;
+            return V3_NO_INTERFACE;
+        }
+
+        static uint32_t V3_API ref_unit_information(void* const self)
+        {
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller != nullptr)
+                return ++uinfo->controller->refcounter;
+            return 1;
+        }
+
+        static uint32_t V3_API unref_unit_information(void* const self)
+        {
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller != nullptr)
+                return --uinfo->controller->refcounter;
+            return 0;
+        }
+
+        static int32_t V3_API get_unit_count(void* const self)
+        {
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return 1;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            return 1 + static_cast<int32_t>(plugin.getPortGroupCount());
+        }
+
+        static v3_result V3_API get_unit_info(void* const self, const int32_t unit_idx, v3_unit_info* const info)
+        {
+            if (info == nullptr || unit_idx < 0)
+                return V3_INVALID_ARG;
+
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return V3_NOT_INITIALIZED;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            const uint32_t groupCount = plugin.getPortGroupCount();
+
+            if (unit_idx > static_cast<int32_t>(groupCount))
+                return V3_INVALID_ARG;
+
+            std::memset(info, 0, sizeof(v3_unit_info));
+
+            if (unit_idx == 0)
+            {
+                info->id = 0;
+                info->parent_unit_id = -1;
+                info->program_list_id = -1;
+                strncpy_utf16(info->name, "Root", 128);
+                return V3_OK;
+            }
+
+            const PortGroupWithId& group(plugin.getPortGroupByIndex(static_cast<uint32_t>(unit_idx - 1)));
+            info->id = static_cast<int32_t>(group.groupId + 1);
+            info->parent_unit_id = 0;
+            info->program_list_id = -1;
+            strncpy_utf16(info->name, group.name.buffer(), 128);
+            return V3_OK;
+        }
+
+        static int32_t V3_API get_program_list_count(void*)
+        {
+            return 0;
+        }
+
+        static v3_result V3_API get_program_list_info(void*, int32_t, v3_program_list_info*)
+        {
+            return V3_NOT_IMPLEMENTED;
+        }
+
+        static v3_result V3_API get_program_name(void*, int32_t, int32_t, v3_str_128)
+        {
+            return V3_NOT_IMPLEMENTED;
+        }
+
+        static v3_result V3_API get_program_info(void*, int32_t, int32_t, const char*, v3_str_128)
+        {
+            return V3_NOT_IMPLEMENTED;
+        }
+
+        static v3_result V3_API has_program_pitch_names(void*, int32_t, int32_t)
+        {
+            return V3_FALSE;
+        }
+
+        static v3_result V3_API get_program_pitch_name(void*, int32_t, int32_t, int16_t, v3_str_128)
+        {
+            return V3_NOT_IMPLEMENTED;
+        }
+
+        static int32_t V3_API get_selected_unit(void*)
+        {
+            return 0;
+        }
+
+        static v3_result V3_API select_unit(void*, int32_t)
+        {
+            return V3_OK;
+        }
+
+        static v3_result V3_API get_unit_by_bus(void*, int32_t, int32_t, int32_t, int32_t, int32_t* const unit_id)
+        {
+            if (unit_id != nullptr)
+                *unit_id = 0;
+            return V3_OK;
+        }
+
+        static v3_result V3_API set_unit_program_data(void*, int32_t, int32_t, struct v3_bstream**)
+        {
+            return V3_NOT_IMPLEMENTED;
+        }
+    } unit_info;
+    dpf_unit_information* unit_info_ptr;
+
    #if DPF_VST3_USES_SEPARATE_CONTROLLER
     dpf_edit_controller(v3_host_application** const hostApp)
         : refcounter(1),
@@ -3583,6 +3786,10 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
         ctrl.set_parameter_normalised = set_parameter_normalised;
         ctrl.set_component_handler = set_component_handler;
         ctrl.create_view = create_view;
+
+        // v3_unit_information
+        unit_info.controller = this;
+        unit_info_ptr = &unit_info;
     }
 
     ~dpf_edit_controller()
@@ -3618,6 +3825,14 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
             d_debug("query_interface_edit_controller => %p %s %p | OK", self, tuid2str(iid), iface);
             ++controller->refcounter;
             *iface = self;
+            return V3_OK;
+        }
+
+        if (v3_tuid_match(iid, v3_unit_information_iid))
+        {
+            d_debug("query_interface_edit_controller => %p %s %p | OK unit_info", self, tuid2str(iid), iface);
+            ++controller->refcounter;
+            *iface = &controller->unit_info_ptr;
             return V3_OK;
         }
 
@@ -4362,6 +4577,26 @@ struct dpf_component : v3_component_cpp {
             else
                 ++component->controller->refcounter;
             *iface = &component->controller;
+            return V3_OK;
+           #else
+            d_debug("query_interface_component => %p %s %p | reject unwanted", self, tuid2str(iid), iface);
+            *iface = nullptr;
+            return V3_NO_INTERFACE;
+           #endif
+        }
+
+        if (v3_tuid_match(iid, v3_unit_information_iid))
+        {
+           #if !DPF_VST3_USES_SEPARATE_CONTROLLER
+            d_debug("query_interface_component => %p %s %p | OK convert unit_info", self, tuid2str(iid), iface);
+
+            if (component->controller == nullptr)
+                component->controller = new dpf_edit_controller(component->vst3,
+                                                                component->hostApplicationFromFactory,
+                                                                component->hostApplicationFromInitialize);
+            else
+                ++component->controller->refcounter;
+            *iface = &component->controller->unit_info_ptr;
             return V3_OK;
            #else
             d_debug("query_interface_component => %p %s %p | reject unwanted", self, tuid2str(iid), iface);

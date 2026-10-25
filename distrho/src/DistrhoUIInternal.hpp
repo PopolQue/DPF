@@ -88,6 +88,15 @@ public:
         DISTRHO_SAFE_ASSERT_RETURN(uiPtr != nullptr,);
         ui = uiPtr;
         uiData->initializing = false;
+
+       #if DISTRHO_PLUGIN_AND_UI_IN_SINGLE_OBJECT
+        if (dspPtr != nullptr)
+        {
+            const Plugin* const plugin = static_cast<const Plugin*>(dspPtr);
+            if (plugin->getTrackName() != nullptr && (plugin->getTrackName()[0] != '\0' || plugin->getTrackColor() != 0))
+                ui->uiTrackInfoChanged(plugin->getTrackName(), plugin->getTrackColor());
+        }
+       #endif
     }
 
     ~UIExporter()
@@ -376,6 +385,20 @@ public:
         DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
 
         ui->uiFocus(focus, DGL_NAMESPACE::kCrossingNormal);
+    }
+
+    void notifyTrackInfoChanged(const char* const name, const uint32_t colorRGBA)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
+
+        ui->uiTrackInfoChanged(name, colorRGBA);
+    }
+
+    void notifyParamIndicationChanged(const uint32_t index, const bool hasMapping, const uint32_t colorRGBA, const char* const label)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
+
+        ui->uiParamIndicationChanged(index, hasMapping, colorRGBA, label);
     }
 
     void setSampleRate(const double sampleRate, const bool doCallback = false)

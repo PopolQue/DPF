@@ -194,6 +194,16 @@ public:
     */
     DataRingBuffer& getTelemetryBuffer() noexcept;
 
+   /**
+      Get the current track name provided by the host, or empty string if not provided.
+    */
+    const char* getTrackName() const noexcept;
+
+   /**
+      Get the current track color (in RGBA 0xRRGGBBAA format) provided by the host, or 0 if not provided.
+    */
+    uint32_t getTrackColor() const noexcept;
+
 protected:
    /* --------------------------------------------------------------------------------------------------------
     * Information */

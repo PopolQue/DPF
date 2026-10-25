@@ -188,6 +188,9 @@ struct Plugin::PrivateData {
 
     DataRingBuffer telemetryBuffer;
 
+    String   trackName;
+    uint32_t trackColor;
+
     PrivateData() noexcept
         : canRequestParameterValueChanges(d_nextCanRequestParameterValueChanges),
           isDummy(d_nextPluginIsDummy),
@@ -218,7 +221,9 @@ struct Plugin::PrivateData {
           updateStateValueCallbackFunc(nullptr),
           bufferSize(d_nextBufferSize),
           sampleRate(d_nextSampleRate),
-          bundlePath(d_nextBundlePath != nullptr ? strdup(d_nextBundlePath) : nullptr)
+          bundlePath(d_nextBundlePath != nullptr ? strdup(d_nextBundlePath) : nullptr),
+          trackName(),
+          trackColor(0)
     {
         DISTRHO_SAFE_ASSERT(bufferSize != 0);
         DISTRHO_SAFE_ASSERT(d_isNotZero(sampleRate));
@@ -1085,6 +1090,25 @@ public:
             fPlugin->sampleRateChanged(sampleRate);
             if (fIsActive) fPlugin->activate();
         }
+    }
+
+    const char* getTrackName() const noexcept
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fData != nullptr, "");
+        return fData->trackName.buffer();
+    }
+
+    uint32_t getTrackColor() const noexcept
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fData != nullptr, 0);
+        return fData->trackColor;
+    }
+
+    void setTrackInfo(const char* const name, const uint32_t color)
+    {
+        DISTRHO_SAFE_ASSERT_RETURN(fData != nullptr,);
+        fData->trackName = name != nullptr ? name : "";
+        fData->trackColor = color;
     }
 
 private:

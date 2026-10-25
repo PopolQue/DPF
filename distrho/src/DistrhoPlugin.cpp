@@ -167,6 +167,16 @@ DataRingBuffer& Plugin::getTelemetryBuffer() noexcept
     return pData->telemetryBuffer;
 }
 
+const char* Plugin::getTrackName() const noexcept
+{
+    return pData->trackName.buffer();
+}
+
+uint32_t Plugin::getTrackColor() const noexcept
+{
+    return pData->trackColor;
+}
+
 /* ------------------------------------------------------------------------------------------------------------
  * Init */
 

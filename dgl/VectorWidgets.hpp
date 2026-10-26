@@ -31,5 +31,7 @@
 #include "widgets/VectorToggleSwitch.hpp"
 #include "widgets/VectorEnvelope.hpp"
 #include "widgets/VectorKeyboard.hpp"
+#include "widgets/VectorWaveform.hpp"
+#include "widgets/VectorPlot.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

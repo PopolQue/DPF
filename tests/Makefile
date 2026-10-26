@@ -49,6 +49,7 @@ UNIT_TESTS   += TestThreadPoolAndA11y
 UNIT_TESTS   += TestXYPadAndToggleSwitch
 UNIT_TESTS   += TestEnvelopeAndContextMenu
 UNIT_TESTS   += TestVectorKeyboard
+UNIT_TESTS   += TestWaveformAndPlot
 ifeq ($(MACOS),true)
 UNIT_TESTS   += TestNativeAccessibility
 UNIT_TESTS   += TestAUv3
@@ -224,6 +225,10 @@ clean:
 	@echo "Linking TestVectorKeyboard (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestWaveformAndPlot$(APP_EXT): ../build/tests/TestWaveformAndPlot.cpp.o ../build/libdgl-opengl.a
+	@echo "Linking TestWaveformAndPlot (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
+
 ../build/tests/TestNativeAccessibility$(APP_EXT): ../build/tests/TestNativeAccessibility.mm.o ../build/libdgl-opengl.a
 	@echo "Linking TestNativeAccessibility (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -framework Cocoa -o $@
@@ -234,7 +239,7 @@ clean:
 
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu TestVectorKeyboard TestNativeAccessibility TestAUv3
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu TestVectorKeyboard TestWaveformAndPlot TestNativeAccessibility TestAUv3
 
 -include $(ALL_OBJS:%.o=%.d)
 

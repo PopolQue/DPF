@@ -402,6 +402,11 @@ void UI::setParameterValue(uint32_t index, float value)
     uiData->setParamCallback(index + uiData->parameterOffset, value);
 }
 
+bool UI::showContextMenu(uint32_t index, int32_t screenX, int32_t screenY)
+{
+    return uiData->contextMenuCallback(index + uiData->parameterOffset, screenX, screenY);
+}
+
 #if DISTRHO_PLUGIN_WANT_STATE
 void UI::setState(const char* key, const char* value)
 {

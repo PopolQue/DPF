@@ -48,7 +48,16 @@ public:
         virtual void vectorSliderDragStarted(VectorSlider* slider) {}
         virtual void vectorSliderDragFinished(VectorSlider* slider) {}
         virtual void vectorSliderValueChanged(VectorSlider* slider, float value) {}
+        virtual void vectorSliderContextMenu(VectorSlider* slider, int32_t x, int32_t y) { (void)slider; (void)x; (void)y; }
     };
+
+    typedef void (*ContextMenuCallback)(Widget* widget, int32_t x, int32_t y, void* userData);
+
+    void setContextMenuCallback(ContextMenuCallback cb, void* userData = nullptr) noexcept
+    {
+        fContextMenuCb = cb;
+        fContextMenuUserData = userData;
+    }
 
     explicit VectorSlider(Widget* const parentWidget, const Orientation orientation = Vertical)
         : NanoSubWidget(parentWidget),
@@ -67,7 +76,9 @@ public:
           fTrackThickness(6.0f),
           fThumbWidth(18.0f),
           fThumbHeight(12.0f),
-          fCallback(nullptr)
+          fCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -89,7 +100,9 @@ public:
           fTrackThickness(6.0f),
           fThumbWidth(18.0f),
           fThumbHeight(12.0f),
-          fCallback(nullptr)
+          fCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -111,7 +124,9 @@ public:
           fTrackThickness(6.0f),
           fThumbWidth(18.0f),
           fThumbHeight(12.0f),
-          fCallback(nullptr)
+          fCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -396,8 +411,18 @@ protected:
     // ----------------------------------------------------------------------------------------------------------------
     // Events
 
+public:
     bool onMouse(const MouseEvent& ev) override
     {
+        if (ev.button == kMouseButtonRight && ev.press && contains(ev.pos))
+        {
+            if (fCallback != nullptr)
+                fCallback->vectorSliderContextMenu(this, ev.pos.getX(), ev.pos.getY());
+            if (fContextMenuCb != nullptr)
+                fContextMenuCb(this, ev.pos.getX(), ev.pos.getY(), fContextMenuUserData);
+            return true;
+        }
+
         if (ev.button != 1)
             return false;
 
@@ -488,6 +513,8 @@ private:
     float fThumbWidth;
     float fThumbHeight;
     Callback* fCallback;
+    ContextMenuCallback fContextMenuCb;
+    void* fContextMenuUserData;
 
     void initAccessibility()
     {

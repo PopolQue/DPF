@@ -47,6 +47,7 @@ UNIT_TESTS   += TestVectorScopeAndTabs
 UNIT_TESTS   += TestVectorSpectrum
 UNIT_TESTS   += TestThreadPoolAndA11y
 UNIT_TESTS   += TestXYPadAndToggleSwitch
+UNIT_TESTS   += TestEnvelopeAndContextMenu
 endif
 ifeq ($(HAVE_STUB),true)
 UNIT_TESTS   += Window.stub
@@ -205,9 +206,13 @@ clean:
 	@echo "Linking TestXYPadAndToggleSwitch (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestEnvelopeAndContextMenu$(APP_EXT): ../build/tests/TestEnvelopeAndContextMenu.cpp.o ../build/libdgl-opengl.a
+	@echo "Linking TestEnvelopeAndContextMenu (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu
 
 -include $(ALL_OBJS:%.o=%.d)
 

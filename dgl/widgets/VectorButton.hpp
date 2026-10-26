@@ -49,7 +49,16 @@ public:
         virtual ~Callback() {}
         virtual void vectorButtonClicked(VectorButton* button, int mouseButton) {}
         virtual void vectorButtonToggled(VectorButton* button, bool checked) {}
+        virtual void vectorButtonContextMenu(VectorButton* button, int32_t x, int32_t y) { (void)button; (void)x; (void)y; }
     };
+
+    typedef void (*ContextMenuCallback)(Widget* widget, int32_t x, int32_t y, void* userData);
+
+    void setContextMenuCallback(ContextMenuCallback cb, void* userData = nullptr) noexcept
+    {
+        fContextMenuCb = cb;
+        fContextMenuUserData = userData;
+    }
 
     explicit VectorButton(Widget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -67,7 +76,9 @@ public:
           fFontSize(12.0f),
           fHasLed(false),
           fLedActive(false),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -89,7 +100,9 @@ public:
           fFontSize(12.0f),
           fHasLed(false),
           fLedActive(false),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -111,7 +124,9 @@ public:
           fFontSize(12.0f),
           fHasLed(false),
           fLedActive(false),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         ButtonEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -352,8 +367,18 @@ public:
     // ----------------------------------------------------------------------------------------------------------------
     // Event Forwarding
 
+public:
     bool onMouse(const MouseEvent& ev) override
     {
+        if (ev.button == kMouseButtonRight && ev.press && contains(ev.pos))
+        {
+            if (fUserCallback != nullptr)
+                fUserCallback->vectorButtonContextMenu(this, ev.pos.getX(), ev.pos.getY());
+            if (fContextMenuCb != nullptr)
+                fContextMenuCb(this, ev.pos.getX(), ev.pos.getY(), fContextMenuUserData);
+            return true;
+        }
+
         const bool handled = ButtonEventHandler::mouseEvent(ev);
         repaint();
         return handled;
@@ -389,6 +414,8 @@ private:
     bool fLedActive;
     String fLabel;
     Callback* fUserCallback;
+    ContextMenuCallback fContextMenuCb;
+    void* fContextMenuUserData;
 
     struct InternalCallback : ButtonEventHandler::Callback {
         VectorButton* self;

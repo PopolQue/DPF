@@ -46,7 +46,16 @@ public:
         virtual void vectorKnobDragFinished(VectorKnob* knob) {}
         virtual void vectorKnobValueChanged(VectorKnob* knob, float value) {}
         virtual void vectorKnobDoubleClicked(VectorKnob* knob) {}
+        virtual void vectorKnobContextMenu(VectorKnob* knob, int32_t x, int32_t y) { (void)knob; (void)x; (void)y; }
     };
+
+    typedef void (*ContextMenuCallback)(Widget* widget, int32_t x, int32_t y, void* userData);
+
+    void setContextMenuCallback(ContextMenuCallback cb, void* userData = nullptr) noexcept
+    {
+        fContextMenuCb = cb;
+        fContextMenuUserData = userData;
+    }
 
     explicit VectorKnob(Widget* const parentWidget)
         : NanoSubWidget(parentWidget),
@@ -63,7 +72,9 @@ public:
           fShowValue(false),
           fStartAngle(0.75f * static_cast<float>(M_PI)),  // 135 deg (-135 deg from top)
           fEndAngle(2.25f * static_cast<float>(M_PI)),    // 405 deg (+135 deg from top)
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -84,7 +95,9 @@ public:
           fShowValue(false),
           fStartAngle(0.75f * static_cast<float>(M_PI)),
           fEndAngle(2.25f * static_cast<float>(M_PI)),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -105,7 +118,9 @@ public:
           fShowValue(false),
           fStartAngle(0.75f * static_cast<float>(M_PI)),
           fEndAngle(2.25f * static_cast<float>(M_PI)),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         KnobEventHandler::setCallback(&fInternalCallback);
         initAccessibility();
@@ -338,8 +353,18 @@ protected:
     // ----------------------------------------------------------------------------------------------------------------
     // Events
 
+public:
     bool onMouse(const MouseEvent& ev) override
     {
+        if (ev.button == kMouseButtonRight && ev.press && contains(ev.pos))
+        {
+            if (fUserCallback != nullptr)
+                fUserCallback->vectorKnobContextMenu(this, ev.pos.getX(), ev.pos.getY());
+            if (fContextMenuCb != nullptr)
+                fContextMenuCb(this, ev.pos.getX(), ev.pos.getY(), fContextMenuUserData);
+            return true;
+        }
+
         const bool handled = KnobEventHandler::mouseEvent(ev);
         if (handled)
             repaint();
@@ -378,6 +403,8 @@ private:
     String fLabel;
     String fUnit;
     Callback* fUserCallback;
+    ContextMenuCallback fContextMenuCb;
+    void* fContextMenuUserData;
 
     struct InternalCallback : KnobEventHandler::Callback {
         VectorKnob* self;

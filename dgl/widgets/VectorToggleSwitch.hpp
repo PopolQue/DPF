@@ -48,7 +48,16 @@ public:
     public:
         virtual ~Callback() {}
         virtual void vectorToggleSwitchChanged(VectorToggleSwitch* sw, bool checked) { (void)sw; (void)checked; }
+        virtual void vectorToggleSwitchContextMenu(VectorToggleSwitch* sw, int32_t x, int32_t y) { (void)sw; (void)x; (void)y; }
     };
+
+    typedef void (*ContextMenuCallback)(Widget* widget, int32_t x, int32_t y, void* userData);
+
+    void setContextMenuCallback(ContextMenuCallback cb, void* userData = nullptr) noexcept
+    {
+        fContextMenuCb = cb;
+        fContextMenuUserData = userData;
+    }
 
     explicit VectorToggleSwitch(Widget* const parentWidget, const Orientation orientation = Horizontal)
         : NanoSubWidget(parentWidget),
@@ -61,7 +70,9 @@ public:
           fBorderColor(Color(55, 58, 66)),
           fGlowColor(Color(52, 152, 219, 80)),
           fPadding(3.0f),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -77,7 +88,9 @@ public:
           fBorderColor(Color(55, 58, 66)),
           fGlowColor(Color(52, 152, 219, 80)),
           fPadding(3.0f),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -93,7 +106,9 @@ public:
           fBorderColor(Color(55, 58, 66)),
           fGlowColor(Color(52, 152, 219, 80)),
           fPadding(3.0f),
-          fUserCallback(nullptr)
+          fUserCallback(nullptr),
+          fContextMenuCb(nullptr),
+          fContextMenuUserData(nullptr)
     {
         initAccessibility();
     }
@@ -172,6 +187,15 @@ public:
 
     bool onMouse(const MouseEvent& ev) override
     {
+        if (ev.button == kMouseButtonRight && ev.press && contains(ev.pos))
+        {
+            if (fUserCallback != nullptr)
+                fUserCallback->vectorToggleSwitchContextMenu(this, ev.pos.getX(), ev.pos.getY());
+            if (fContextMenuCb != nullptr)
+                fContextMenuCb(this, ev.pos.getX(), ev.pos.getY(), fContextMenuUserData);
+            return true;
+        }
+
         if (ev.button != kMouseButtonLeft || !ev.press)
             return false;
 
@@ -280,6 +304,8 @@ private:
     float fPadding;
 
     Callback* fUserCallback;
+    ContextMenuCallback fContextMenuCb;
+    void* fContextMenuUserData;
 
     void initAccessibility()
     {

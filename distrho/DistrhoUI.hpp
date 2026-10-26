@@ -157,6 +157,16 @@ public:
     */
     void setParameterValue(uint32_t index, float value);
 
+   /**
+      Request the host to display its native parameter context menu (e.g. automation, MIDI learn).
+      Supported in CLAP (CLAP_EXT_CONTEXT_MENU) and hosts with context menu capabilities.
+      @param index Parameter index.
+      @param screenX Horizontal position (screen or window-relative coordinates).
+      @param screenY Vertical position (screen or window-relative coordinates).
+      @return true if the host accepted and displayed the context menu.
+    */
+    bool showContextMenu(uint32_t index, int32_t screenX, int32_t screenY);
+
 #if DISTRHO_PLUGIN_WANT_STATE
    /**
       setState.

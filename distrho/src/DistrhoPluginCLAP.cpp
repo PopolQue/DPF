@@ -66,6 +66,7 @@
 #include "clap/ext/track-info.h"
 #include "clap/ext/thread-pool.h"
 #include "clap/ext/preset-load.h"
+#include "clap/ext/context-menu.h"
 #include "clap/factory/preset-discovery.h"
 #include "../extra/PresetManager.hpp"
 
@@ -233,6 +234,10 @@ public:
          #endif
           fHost(host),
           fHostGui(hostGui),
+          fHostContextMenu(host != nullptr ? static_cast<const clap_host_context_menu_t*>(
+              host->get_extension(host, CLAP_EXT_CONTEXT_MENU) != nullptr
+                  ? host->get_extension(host, CLAP_EXT_CONTEXT_MENU)
+                  : host->get_extension(host, CLAP_EXT_CONTEXT_MENU_COMPAT)) : nullptr),
          #if DPF_CLAP_USING_HOST_TIMER
           fTimerId(0),
           fHostTimer(hostTimer),
@@ -572,6 +577,7 @@ private:
    #endif
     const clap_host_t* const fHost;
     const clap_host_gui_t* const fHostGui;
+    const clap_host_context_menu_t* const fHostContextMenu;
    #if DPF_CLAP_USING_HOST_TIMER
     clap_id fTimerId;
     const clap_host_timer_support_t* const fHostTimer;
@@ -610,6 +616,8 @@ private:
                              fPlugin.getInstancePointer(),
                              fScaleFactor,
                              DGL_NAMESPACE::Application::kTypeClassic);
+
+        fUI->setContextMenuCallback(contextMenuCallback);
 
        #if DISTRHO_PLUGIN_WANT_PROGRAMS
         fUI->programLoaded(fCurrentProgram);
@@ -738,6 +746,23 @@ private:
         static_cast<ClapUI*>(ptr)->sendNote(channel, note, velocity);
     }
    #endif
+
+    bool showContextMenu(const uint32_t rindex, const int32_t screenX, const int32_t screenY) const
+    {
+        if (fHostContextMenu == nullptr || fHostContextMenu->popup == nullptr)
+            return false;
+
+        clap_context_menu_target_t target;
+        target.kind = CLAP_CONTEXT_MENU_TARGET_KIND_PARAM;
+        target.id = rindex;
+
+        return fHostContextMenu->popup(fHost, &target, screenX, screenY);
+    }
+
+    static bool contextMenuCallback(void* const ptr, const uint32_t rindex, const int32_t screenX, const int32_t screenY)
+    {
+        return static_cast<ClapUI*>(ptr)->showContextMenu(rindex, screenX, screenY);
+    }
 
     /* TODO
     bool fileRequest(const char*)
@@ -2249,6 +2274,7 @@ private:
         const clap_host_remote_controls_t* remoteControls;
         const clap_host_track_info_t* trackInfo;
         const clap_host_thread_pool_t* threadPool;
+        const clap_host_context_menu_t* contextMenu;
 
         HostExtensions(const clap_host_t* const host)
             : host(host),
@@ -2260,6 +2286,7 @@ private:
             , remoteControls(nullptr)
             , trackInfo(nullptr)
             , threadPool(nullptr)
+            , contextMenu(nullptr)
         {}
 
         bool init()
@@ -2274,6 +2301,9 @@ private:
             remoteControls = static_cast<const clap_host_remote_controls_t*>(host->get_extension(host, CLAP_EXT_REMOTE_CONTROLS));
             trackInfo = static_cast<const clap_host_track_info_t*>(host->get_extension(host, CLAP_EXT_TRACK_INFO));
             threadPool = static_cast<const clap_host_thread_pool_t*>(host->get_extension(host, CLAP_EXT_THREAD_POOL));
+            contextMenu = static_cast<const clap_host_context_menu_t*>(host->get_extension(host, CLAP_EXT_CONTEXT_MENU));
+            if (contextMenu == nullptr)
+                contextMenu = static_cast<const clap_host_context_menu_t*>(host->get_extension(host, CLAP_EXT_CONTEXT_MENU_COMPAT));
             return true;
         }
     } fHostExtensions;
@@ -2494,6 +2524,19 @@ private:
     {
         if (fHostExtensions.threadPool != nullptr && fHostExtensions.threadPool->request_exec != nullptr)
             return fHostExtensions.threadPool->request_exec(fHost, numTasks);
+
+        return false;
+    }
+
+    bool popupContextMenu(const uint32_t paramId, const int32_t screenX, const int32_t screenY) const noexcept
+    {
+        if (fHostExtensions.contextMenu != nullptr && fHostExtensions.contextMenu->popup != nullptr)
+        {
+            clap_context_menu_target_t target;
+            target.kind = CLAP_CONTEXT_MENU_TARGET_KIND_PARAM;
+            target.id = paramId;
+            return fHostExtensions.contextMenu->popup(fHost, &target, screenX, screenY);
+        }
 
         return false;
     }
@@ -3338,8 +3381,22 @@ static const clap_plugin_thread_pool_t clap_plugin_thread_pool = {
     clap_plugin_thread_pool_exec
 };
 
+// context menu
+
+static bool CLAP_ABI clap_context_menu_can_popup(const clap_plugin_t*)
+{
+    return true;
+}
+
+static const clap_plugin_context_menu_t clap_plugin_context_menu = {
+    clap_context_menu_can_popup
+};
+
 static const void* CLAP_ABI clap_plugin_get_extension(const clap_plugin_t* const plugin, const char* const id)
 {
+    if (std::strcmp(id, CLAP_EXT_CONTEXT_MENU) == 0 ||
+        std::strcmp(id, CLAP_EXT_CONTEXT_MENU_COMPAT) == 0)
+        return &clap_plugin_context_menu;
     if (std::strcmp(id, CLAP_EXT_THREAD_POOL) == 0)
         return &clap_plugin_thread_pool;
     if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG) == 0 ||

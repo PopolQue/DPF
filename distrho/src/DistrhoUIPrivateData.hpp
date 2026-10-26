@@ -254,6 +254,7 @@ typedef void (*setStateFunc)    (void* ptr, const char* key, const char* value);
 typedef void (*sendNoteFunc)    (void* ptr, uint8_t channel, uint8_t note, uint8_t velo);
 typedef void (*setSizeFunc)     (void* ptr, uint width, uint height);
 typedef bool (*fileRequestFunc) (void* ptr, const char* key);
+typedef bool (*contextMenuFunc) (void* ptr, uint32_t rindex, int32_t screenX, int32_t screenY);
 
 // --------------------------------------------------------------------------------------------------------------------
 // UI private data
@@ -294,6 +295,7 @@ struct UI::PrivateData {
     sendNoteFunc    sendNoteCallbackFunc;
     setSizeFunc     setSizeCallbackFunc;
     fileRequestFunc fileRequestCallbackFunc;
+    contextMenuFunc contextMenuCallbackFunc;
 
     PrivateData(const char* const appClassName, const DGL_NAMESPACE::Application::Type appType) noexcept
         : app(appClassName, appType),
@@ -320,7 +322,8 @@ struct UI::PrivateData {
           setStateCallbackFunc(nullptr),
           sendNoteCallbackFunc(nullptr),
           setSizeCallbackFunc(nullptr),
-          fileRequestCallbackFunc(nullptr)
+          fileRequestCallbackFunc(nullptr),
+          contextMenuCallbackFunc(nullptr)
     {
       #if defined(DISTRHO_PLUGIN_TARGET_DSSI) || defined(DISTRHO_PLUGIN_TARGET_LV2)
         parameterOffset += DISTRHO_PLUGIN_NUM_INPUTS + DISTRHO_PLUGIN_NUM_OUTPUTS;
@@ -384,6 +387,13 @@ struct UI::PrivateData {
 
         if (setSizeCallbackFunc != nullptr)
             setSizeCallbackFunc(callbacksPtr, width, height);
+    }
+
+    bool contextMenuCallback(const uint32_t rindex, const int32_t screenX, const int32_t screenY)
+    {
+        if (contextMenuCallbackFunc != nullptr)
+            return contextMenuCallbackFunc(callbacksPtr, rindex, screenX, screenY);
+        return false;
     }
 
     // implemented below, after PluginWindow

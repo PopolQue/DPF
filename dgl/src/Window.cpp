@@ -414,6 +414,25 @@ double Window::getScaleFactor() const noexcept
     return pData->scaleFactor;
 }
 
+void Window::setScaleFactor(const double scaleFactor)
+{
+    if (d_isEqual(pData->scaleFactor, scaleFactor) || scaleFactor <= 0.0)
+        return;
+
+    pData->scaleFactor = scaleFactor;
+    onScaleFactorChanged(scaleFactor);
+
+    for (std::list<TopLevelWidget*>::iterator it = pData->topLevelWidgets.begin(),
+                                              end = pData->topLevelWidgets.end(); it != end; ++it)
+    {
+        TopLevelWidget* const widget = *it;
+        widget->onScaleFactorChanged(scaleFactor);
+    }
+
+    if (pData->view != nullptr)
+        puglObscureView(pData->view);
+}
+
 void Window::focus()
 {
     pData->focus();

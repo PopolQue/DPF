@@ -140,6 +140,12 @@ bool TopLevelWidget::onScroll(const ScrollEvent& ev)
     return pData->scrollEvent(ev);
 }
 
+void TopLevelWidget::onScaleFactorChanged(const double scaleFactor)
+{
+    Widget::onScaleFactorChanged(scaleFactor);
+    repaint();
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 
 void TopLevelWidget::requestSizeChange(uint, uint)

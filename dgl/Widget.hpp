@@ -452,6 +452,12 @@ protected:
     virtual void onResize(const ResizeEvent&);
 
    /**
+      A function called when scale factor for this widget or its window changes.
+      The default implementation does nothing.
+    */
+    virtual void onScaleFactorChanged(double scaleFactor);
+
+   /**
       A function called when a special key is pressed or released.
       DEPRECATED use onKeyboard or onCharacterInput
     */

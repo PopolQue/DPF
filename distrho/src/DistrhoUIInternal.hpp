@@ -384,6 +384,10 @@ public:
     {
         DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
 
+        uiData->scaleFactor = scaleFactor;
+        if (uiData->window != nullptr)
+            uiData->window->setScaleFactor(scaleFactor);
+
         ui->uiScaleFactorChanged(scaleFactor);
     }
 

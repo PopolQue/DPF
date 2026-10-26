@@ -210,6 +210,10 @@ void Widget::onResize(const ResizeEvent&)
 {
 }
 
+void Widget::onScaleFactorChanged(double)
+{
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 
 END_NAMESPACE_DGL

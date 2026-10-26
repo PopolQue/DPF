@@ -125,6 +125,7 @@ protected:
     bool onMouse(const MouseEvent&) override;
     bool onMotion(const MotionEvent&) override;
     bool onScroll(const ScrollEvent&) override;
+    void onScaleFactorChanged(double scaleFactor) override;
 
 private:
     struct PrivateData;

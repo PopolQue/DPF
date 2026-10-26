@@ -44,6 +44,45 @@ static bool isThisTheMainThread(const d_ThreadHandle mainThreadHandle) noexcept
    #endif
 }
 
+#ifdef DISTRHO_OS_WINDOWS
+static void initWindowsDpiAwareness()
+{
+    static bool initialized = false;
+    if (initialized)
+        return;
+    initialized = true;
+
+    HMODULE user32 = LoadLibraryExA("user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32 != nullptr)
+    {
+        typedef BOOL(WINAPI* PFN_SetProcessDpiAwarenessContext)(HANDLE);
+        PFN_SetProcessDpiAwarenessContext setContext =
+            (PFN_SetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+
+        /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ((HANDLE)-4) */
+        if (setContext != nullptr && setContext((HANDLE)-4))
+        {
+            /* Per-Monitor DPI v2 enabled */
+        }
+        else
+        {
+            HMODULE shcore = LoadLibraryExA("shcore.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if (shcore != nullptr)
+            {
+                typedef HRESULT(WINAPI* PFN_SetProcessDpiAwareness)(DWORD);
+                PFN_SetProcessDpiAwareness setAwareness =
+                    (PFN_SetProcessDpiAwareness)GetProcAddress(shcore, "SetProcessDpiAwareness");
+                /* PROCESS_PER_MONITOR_DPI_AWARE = 2 */
+                if (setAwareness != nullptr)
+                    setAwareness(2);
+                FreeLibrary(shcore);
+            }
+        }
+        FreeLibrary(user32);
+    }
+}
+#endif
+
 // --------------------------------------------------------------------------------------------------------------------
 
 const char* Application::getClassName() const noexcept
@@ -53,9 +92,17 @@ const char* Application::getClassName() const noexcept
 
 // --------------------------------------------------------------------------------------------------------------------
 
+static PuglWorld* createPuglWorld(const bool standalone)
+{
+   #ifdef DISTRHO_OS_WINDOWS
+    initWindowsDpiAwareness();
+   #endif
+    return puglNewWorld(standalone ? PUGL_PROGRAM : PUGL_MODULE,
+                        (standalone ? PUGL_WORLD_THREADS : 0));
+}
+
 Application::PrivateData::PrivateData(const bool standalone, const Type type)
-    : world(puglNewWorld(standalone ? PUGL_PROGRAM : PUGL_MODULE,
-                         (standalone ? PUGL_WORLD_THREADS : 0))),
+    : world(createPuglWorld(standalone)),
       isModern(false),
       isStandalone(standalone),
       isStarting(true),

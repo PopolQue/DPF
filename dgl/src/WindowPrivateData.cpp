@@ -646,6 +646,19 @@ void Window::PrivateData::onPuglConfigure(const uint width, const uint height)
 
     DGL_DBGp("PUGL: onReshape : %d %d\n", width, height);
 
+    const double newScaleFactor = DGL_NAMESPACE::getScaleFactor(view);
+    if (d_isNotEqual(scaleFactor, newScaleFactor) && newScaleFactor > 0.0)
+    {
+        scaleFactor = newScaleFactor;
+        self->onScaleFactorChanged(newScaleFactor);
+
+        FOR_EACH_TOP_LEVEL_WIDGET(it)
+        {
+            TopLevelWidget* const widget = *it;
+            widget->onScaleFactorChanged(newScaleFactor);
+        }
+    }
+
    #ifndef DPF_TEST_WINDOW_CPP
     createContextIfNeeded();
    #endif

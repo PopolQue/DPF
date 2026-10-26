@@ -393,6 +393,12 @@ public:
     double getScaleFactor() const noexcept;
 
    /**
+      Set the scale factor for this window.
+      Calls onScaleFactorChanged(), notifies mapped TopLevelWidgets and repaints.
+    */
+    void setScaleFactor(double scaleFactor);
+
+   /**
       Grab the keyboard input focus.
     */
     void focus();

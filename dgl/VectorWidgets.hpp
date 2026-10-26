@@ -30,5 +30,6 @@
 #include "widgets/VectorXYPad.hpp"
 #include "widgets/VectorToggleSwitch.hpp"
 #include "widgets/VectorEnvelope.hpp"
+#include "widgets/VectorKeyboard.hpp"
 
 #endif // DGL_VECTOR_WIDGETS_HPP_INCLUDED

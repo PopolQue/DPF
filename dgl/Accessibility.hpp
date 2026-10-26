@@ -38,7 +38,8 @@ enum AccessibleRole {
     kAccessibleRoleTextEditor,
     kAccessibleRoleTab,
     kAccessibleRoleIndicator,
-    kAccessibleRoleGroup
+    kAccessibleRoleGroup,
+    kAccessibleRoleKeyboard
 };
 
 /**

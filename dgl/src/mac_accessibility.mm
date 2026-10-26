@@ -83,6 +83,7 @@
     case DGL_NAMESPACE::kAccessibleRoleIndicator:
         return NSAccessibilityValueIndicatorRole;
     case DGL_NAMESPACE::kAccessibleRoleGroup:
+    case DGL_NAMESPACE::kAccessibleRoleKeyboard:
         return NSAccessibilityGroupRole;
     default:
         return NSAccessibilityUnknownRole;
@@ -112,6 +113,8 @@
         return @"tab";
     case DGL_NAMESPACE::kAccessibleRoleIndicator:
         return @"indicator";
+    case DGL_NAMESPACE::kAccessibleRoleKeyboard:
+        return @"keyboard";
     default:
         return @"";
     }

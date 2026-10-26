@@ -151,6 +151,12 @@ int main()
         env.setName("Filter Envelope");
         env.setAccessibleLabel("Filter Envelope");
 
+        VectorKeyboard keyboard(&container);
+        keyboard.setAbsolutePos(20, 270);
+        keyboard.setSize(400, 80);
+        keyboard.setName("Keyboard");
+        keyboard.setAccessibleLabel("Keyboard");
+
         win.show();
 
         // 2. Query native Cocoa NSView
@@ -165,7 +171,7 @@ int main()
         // 3. Query accessibilityChildren
         NSArray* children = [view accessibilityChildren];
         assert(children != nil);
-        assert(children.count == 5);
+        assert(children.count == 6);
         std::cout << "  ✓ Verified accessibilityChildren count: " << children.count << std::endl;
 
         id knobElem = findChildByLabel(children, @"Gain");
@@ -173,12 +179,14 @@ int main()
         id toggleElem = findChildByLabel(children, @"Bypass");
         id buttonElem = findChildByLabel(children, @"Trigger");
         id envElem = findChildByLabel(children, @"Filter Envelope");
+        id kbdElem = findChildByLabel(children, @"Keyboard");
 
         assert(knobElem != nil);
         assert(sliderElem != nil);
         assert(toggleElem != nil);
         assert(buttonElem != nil);
         assert(envElem != nil);
+        assert(kbdElem != nil);
         (void)envElem;
 
         // 4. Verify Roles and Role Descriptions
@@ -214,6 +222,11 @@ int main()
         assert([[envElem accessibilityRoleDescription] isEqualToString:@"indicator"]);
         assert([[envElem accessibilityLabel] isEqualToString:@"Filter Envelope"]);
         std::cout << "  ✓ Verified VectorEnvelope NSAccessibilityValueIndicatorRole and label" << std::endl;
+
+        assert([kbdElem accessibilityRole] == NSAccessibilityGroupRole);
+        assert([[kbdElem accessibilityRoleDescription] isEqualToString:@"keyboard"]);
+        assert([[kbdElem accessibilityLabel] isEqualToString:@"Keyboard"]);
+        std::cout << "  ✓ Verified VectorKeyboard NSAccessibilityGroupRole, roleDescription, and label" << std::endl;
 
         // 5. Test VoiceOver Keyboard Actions
         std::cout << "--- Testing VoiceOver Action Invocations ---" << std::endl;
@@ -272,6 +285,18 @@ int main()
         (void)buttonPress;
         assert(buttonCb.clickCount == 1);
         std::cout << "  ✓ Verified VectorButton accessibilityPerformPress action" << std::endl;
+
+        // Keyboard VoiceOver actions
+        BOOL kbdInc = [(id)kbdElem accessibilityPerformIncrement];
+        assert(kbdInc == YES);
+        (void)kbdInc;
+        assert(keyboard.getFocusedKey() == 49);
+
+        BOOL kbdDec = [(id)kbdElem accessibilityPerformDecrement];
+        assert(kbdDec == YES);
+        (void)kbdDec;
+        assert(keyboard.getFocusedKey() == 48);
+        std::cout << "  ✓ Verified VectorKeyboard VoiceOver accessibilityPerformIncrement / Decrement" << std::endl;
 
         // 6. Test accessibilityHitTest:
         std::cout << "--- Testing VoiceOver accessibilityHitTest ---" << std::endl;

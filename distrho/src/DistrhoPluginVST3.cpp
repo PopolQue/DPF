@@ -253,7 +253,7 @@ const char* tuid2str(const v3_tuid iid)
 // --------------------------------------------------------------------------------------------------------------------
 // dpf_plugin_view_create (implemented on UI side)
 
-v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, void* instancePointer, double sampleRate);
+v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, v3_component_handler** handler, void* instancePointer, double sampleRate);
 
 // --------------------------------------------------------------------------------------------------------------------
 
@@ -3947,7 +3947,12 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
             {
                 info->id = 0;
                 info->parent_unit_id = -1;
+               #if DISTRHO_PLUGIN_WANT_PROGRAMS
+                const uint32_t programCount = plugin.getProgramCount();
+                info->program_list_id = (programCount > 0) ? 0 : -1;
+               #else
                 info->program_list_id = -1;
+               #endif
                 strncpy_utf16(info->name, "Root", 128);
                 return V3_OK;
             }
@@ -3960,24 +3965,94 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
             return V3_OK;
         }
 
-        static int32_t V3_API get_program_list_count(void*)
+        static int32_t V3_API get_program_list_count(void* const self)
         {
+           #if DISTRHO_PLUGIN_WANT_PROGRAMS
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return 0;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            return (plugin.getProgramCount() > 0) ? 1 : 0;
+           #else
             return 0;
+            (void)self;
+           #endif
         }
 
-        static v3_result V3_API get_program_list_info(void*, int32_t, v3_program_list_info*)
+        static v3_result V3_API get_program_list_info(void* const self, const int32_t list_idx, v3_program_list_info* const info)
         {
+            if (info == nullptr || list_idx != 0)
+                return V3_INVALID_ARG;
+
+           #if DISTRHO_PLUGIN_WANT_PROGRAMS
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return V3_NOT_INITIALIZED;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            const uint32_t count = plugin.getProgramCount();
+            if (count == 0)
+                return V3_INVALID_ARG;
+
+            info->id = 0;
+            info->programCount = static_cast<int32_t>(count);
+            strncpy_utf16(info->name, "Factory Presets", 128);
+            return V3_OK;
+           #else
             return V3_NOT_IMPLEMENTED;
+            (void)self;
+           #endif
         }
 
-        static v3_result V3_API get_program_name(void*, int32_t, int32_t, v3_str_128)
+        static v3_result V3_API get_program_name(void* const self, const int32_t list_id, const int32_t program_idx, v3_str_128 name)
         {
+            if (name == nullptr || list_id != 0 || program_idx < 0)
+                return V3_INVALID_ARG;
+
+           #if DISTRHO_PLUGIN_WANT_PROGRAMS
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return V3_NOT_INITIALIZED;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            if (static_cast<uint32_t>(program_idx) >= plugin.getProgramCount())
+                return V3_INVALID_ARG;
+
+            strncpy_utf16(name, plugin.getProgramName(static_cast<uint32_t>(program_idx)).buffer(), 128);
+            return V3_OK;
+           #else
             return V3_NOT_IMPLEMENTED;
+            (void)self;
+           #endif
         }
 
-        static v3_result V3_API get_program_info(void*, int32_t, int32_t, const char*, v3_str_128)
+        static v3_result V3_API get_program_info(void* const self, const int32_t list_id, const int32_t program_idx, const char* const attribute_id, v3_str_128 attribute_value)
         {
+            if (attribute_value == nullptr || list_id != 0 || program_idx < 0 || attribute_id == nullptr)
+                return V3_INVALID_ARG;
+
+           #if DISTRHO_PLUGIN_WANT_PROGRAMS
+            dpf_unit_information* const uinfo = *static_cast<dpf_unit_information**>(self);
+            if (uinfo->controller == nullptr || uinfo->controller->vst3 == nullptr)
+                return V3_NOT_INITIALIZED;
+
+            const PluginExporter& plugin(uinfo->controller->vst3->getPlugin());
+            if (static_cast<uint32_t>(program_idx) >= plugin.getProgramCount())
+                return V3_INVALID_ARG;
+
+            if (std::strcmp(attribute_id, "PlugInName") == 0)
+            {
+                strncpy_utf16(attribute_value, plugin.getName(), 128);
+                return V3_OK;
+            }
+
+            attribute_value[0] = 0;
+            return V3_OK;
+           #else
             return V3_NOT_IMPLEMENTED;
+            (void)self;
+           #endif
         }
 
         static v3_result V3_API has_program_pitch_names(void*, int32_t, int32_t)
@@ -4475,6 +4550,7 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
         DISTRHO_SAFE_ASSERT_RETURN(host != nullptr, nullptr);
 
         v3_plugin_view** const view = dpf_plugin_view_create(host,
+                                                             controller->handler,
                                                              vst3->getInstancePointer(),
                                                              vst3->getSampleRate());
         DISTRHO_SAFE_ASSERT_RETURN(view != nullptr, nullptr);

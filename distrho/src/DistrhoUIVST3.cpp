@@ -174,6 +174,7 @@ class UIVst3
 public:
     UIVst3(v3_plugin_view** const view,
            v3_host_application** const host,
+           v3_component_handler** const handler,
            v3_connection_point** const connection,
            v3_plugin_frame** const frame,
            const intptr_t winId,
@@ -188,6 +189,7 @@ public:
 #endif
           fView(view),
           fHostApplication(host),
+          fHandler(handler),
           fConnection(connection),
           fFrame(frame),
           fScaleFactor(scaleFactor),
@@ -208,6 +210,7 @@ public:
               scaleFactor,
               DGL_NAMESPACE::Application::kTypeClassic)
     {
+        fUI.setContextMenuCallback(contextMenuCallback);
     }
 
     ~UIVst3()
@@ -591,6 +594,7 @@ private:
     // VST3 stuff
     v3_plugin_view** const fView;
     v3_host_application** const fHostApplication;
+    v3_component_handler** fHandler;
     v3_connection_point** fConnection;
     v3_plugin_frame** fFrame;
 
@@ -686,6 +690,42 @@ private:
     static void setParameterCallback(void* const ptr, const uint32_t rindex, const float value)
     {
         static_cast<UIVst3*>(ptr)->setParameterValue(rindex, value);
+    }
+
+    bool showContextMenu(const uint32_t rindex, const int32_t screenX, const int32_t screenY)
+    {
+        v3_component_handler3** handler3 = nullptr;
+
+        if (fHandler != nullptr && v3_cpp_obj_query_interface(fHandler, v3_component_handler3_iid, &handler3) == V3_OK && handler3 != nullptr)
+        {
+            // Queried from fHandler
+        }
+        else if (fFrame != nullptr && v3_cpp_obj_query_interface(fFrame, v3_component_handler3_iid, &handler3) == V3_OK && handler3 != nullptr)
+        {
+            // Queried from fFrame
+        }
+
+        if (handler3 == nullptr)
+            return false;
+
+        const v3_param_id paramId = static_cast<v3_param_id>(rindex);
+        v3_context_menu** const menu = v3_cpp_obj(handler3)->create_context_menu(handler3, fView, &paramId);
+
+        if (menu != nullptr)
+        {
+            v3_cpp_obj(menu)->popup(menu, screenX, screenY);
+            v3_cpp_obj_unref(menu);
+            v3_cpp_obj_unref(handler3);
+            return true;
+        }
+
+        v3_cpp_obj_unref(handler3);
+        return false;
+    }
+
+    static bool contextMenuCallback(void* const ptr, const uint32_t rindex, const int32_t screenX, const int32_t screenY)
+    {
+        return static_cast<UIVst3*>(ptr)->showContextMenu(rindex, screenX, screenY);
     }
 
    #if DISTRHO_PLUGIN_WANT_STATE
@@ -1045,6 +1085,7 @@ struct dpf_plugin_view : v3_plugin_view_cpp {
     ScopedPointer<UIVst3> uivst3;
     // cached values
     v3_host_application** const hostApplication;
+    v3_component_handler** const handler;
     void* const instancePointer;
     double sampleRate;
     v3_plugin_frame** frame;
@@ -1052,9 +1093,10 @@ struct dpf_plugin_view : v3_plugin_view_cpp {
     uint32_t nextWidth, nextHeight;
     bool sizeRequestedBeforeBeingAttached;
 
-    dpf_plugin_view(v3_host_application** const host, void* const instance, const double sr)
+    dpf_plugin_view(v3_host_application** const host, v3_component_handler** const h, void* const instance, const double sr)
         : refcounter(1),
           hostApplication(host),
+          handler(h),
           instancePointer(instance),
           sampleRate(sr),
           frame(nullptr),
@@ -1258,6 +1300,7 @@ struct dpf_plugin_view : v3_plugin_view_cpp {
                 const float lastScaleFactor = view->scale != nullptr ? view->scale->scaleFactor : 0.0f;
                 view->uivst3 = new UIVst3((v3_plugin_view**)self,
                                           view->hostApplication,
+                                          view->handler,
                                           view->connection != nullptr ? view->connection->other : nullptr,
                                           view->frame,
                                           (uintptr_t)parent,
@@ -1465,14 +1508,15 @@ struct dpf_plugin_view : v3_plugin_view_cpp {
 // --------------------------------------------------------------------------------------------------------------------
 // dpf_plugin_view_create (called from plugin side)
 
-v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, void* instancePointer, double sampleRate);
+v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, v3_component_handler** handler, void* instancePointer, double sampleRate);
 
 v3_plugin_view** dpf_plugin_view_create(v3_host_application** const host,
+                                        v3_component_handler** const handler,
                                         void* const instancePointer,
                                         const double sampleRate)
 {
     dpf_plugin_view** const viewptr = new dpf_plugin_view*;
-    *viewptr = new dpf_plugin_view(host, instancePointer, sampleRate);
+    *viewptr = new dpf_plugin_view(host, handler, instancePointer, sampleRate);
     return static_cast<v3_plugin_view**>(static_cast<void*>(viewptr));
 }
 

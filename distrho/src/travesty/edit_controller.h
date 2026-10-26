@@ -65,6 +65,46 @@ struct v3_component_handler2 {
 static constexpr const v3_tuid v3_component_handler2_iid =
 	V3_ID(0xF040B4B3, 0xA36045EC, 0xABCDC045, 0xB4D5A2CC);
 
+enum {
+	V3_CONTEXT_MENU_ITEM_IS_DISABLED    = 1 << 0,
+	V3_CONTEXT_MENU_ITEM_IS_CHECKED     = 1 << 1,
+	V3_CONTEXT_MENU_ITEM_IS_GROUP_START = 1 << 2,
+	V3_CONTEXT_MENU_ITEM_IS_GROUP_END   = 1 << 3,
+	V3_CONTEXT_MENU_ITEM_IS_SEPARATOR   = 1 << 4
+};
+
+struct v3_context_menu_item {
+	v3_str_128 name;
+	int32_t tag;
+	int32_t flags;
+};
+
+struct v3_context_menu_target;
+
+struct v3_context_menu {
+#ifndef __cplusplus
+	struct v3_funknown;
+#endif
+	int32_t (V3_API* get_item_count)(void* self);
+	v3_result (V3_API* get_item)(void* self, int32_t index, struct v3_context_menu_item* item, struct v3_context_menu_target*** target);
+	v3_result (V3_API* add_item)(void* self, const struct v3_context_menu_item* item, struct v3_context_menu_target** target);
+	v3_result (V3_API* remove_item)(void* self, const struct v3_context_menu_item* item, struct v3_context_menu_target** target);
+	v3_result (V3_API* popup)(void* self, int32_t x, int32_t y);
+};
+
+static constexpr const v3_tuid v3_context_menu_iid =
+	V3_ID(0x1A4C4082, 0x546747D9, 0xA03C9E26, 0x3DEFF922);
+
+struct v3_component_handler3 {
+#ifndef __cplusplus
+	struct v3_funknown;
+#endif
+	struct v3_context_menu** (V3_API* create_context_menu)(void* self, struct v3_plugin_view** plug_view, const v3_param_id* param_id);
+};
+
+static constexpr const v3_tuid v3_component_handler3_iid =
+	V3_ID(0x4F04C92E, 0x48964344, 0xBE2850A3, 0xD4C497BA);
+
 /**
  * edit controller
  */
@@ -138,6 +178,14 @@ struct v3_component_handler_cpp : v3_funknown {
 
 struct v3_component_handler2_cpp : v3_funknown {
 	v3_component_handler2 comp2;
+};
+
+struct v3_component_handler3_cpp : v3_funknown {
+	v3_component_handler3 comp3;
+};
+
+struct v3_context_menu_cpp : v3_funknown {
+	v3_context_menu menu;
 };
 
 struct v3_edit_controller_cpp : v3_funknown {

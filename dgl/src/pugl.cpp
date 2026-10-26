@@ -182,6 +182,9 @@ START_NAMESPACE_DGL
 # ifdef DGL_METAL
 #  import "pugl-extra/mac_metal.m"
 # endif
+# if !defined(DPF_TEST_APPLICATION_CPP) && !defined(DPF_TEST_WINDOW_CPP)
+#  import "mac_accessibility.mm"
+# endif
 # pragma clang diagnostic pop
 #elif defined(DISTRHO_OS_WASM)
 # include "pugl-extra/wasm.c"

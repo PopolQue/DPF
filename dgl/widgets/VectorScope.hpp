@@ -34,7 +34,8 @@ START_NAMESPACE_DGL
    Accepts audio blocks directly or decodes lock-free DataRingBuffer telemetry streams.
    Features edge trigger modes, grid reticle, multi-channel support, and neon glow trace rendering.
  */
-class VectorScope : public NanoSubWidget
+class VectorScope : public NanoSubWidget,
+                    public AccessibleElement
 {
 public:
     enum TriggerMode {
@@ -120,6 +121,11 @@ public:
     uint32_t getChannelCount() const noexcept
     {
         return fChannels;
+    }
+
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
     }
 
     void setTriggerMode(const TriggerMode mode) noexcept

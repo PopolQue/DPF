@@ -179,6 +179,29 @@ public:
         repaint();
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        if (action == kAccessibleActionPress)
+        {
+            if (fMode == Toggle)
+            {
+                setToggled(!isChecked(), true);
+            }
+            else
+            {
+                if (fUserCallback != nullptr)
+                    fUserCallback->vectorButtonClicked(this, 1);
+            }
+            return true;
+        }
+        return false;
+    }
+
     bool hasLed() const noexcept
     {
         return fHasLed;

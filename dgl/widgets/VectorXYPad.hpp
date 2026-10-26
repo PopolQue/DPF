@@ -241,6 +241,28 @@ public:
         return fSpringReturn;
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        const float stepX = (fMaxX - fMinX) * 0.05f;
+        const float stepY = (fMaxY - fMinY) * 0.05f;
+        if (action == kAccessibleActionIncrement)
+        {
+            setValues(fX + stepX, fY + stepY, true);
+            return true;
+        }
+        if (action == kAccessibleActionDecrement)
+        {
+            setValues(fX - stepX, fY - stepY, true);
+            return true;
+        }
+        return false;
+    }
+
     void setShowCrosshairs(const bool show) noexcept
     {
         fShowCrosshairs = show;

@@ -257,6 +257,25 @@ public:
         fCallback = callback;
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        const float range = fMax - fMin;
+        const float step = (fStep > 0.0f) ? fStep : ((range > 0.0f) ? (range * 0.05f) : 0.01f);
+
+        if (action == kAccessibleActionIncrement)
+            return setValue(fValue + step, true);
+
+        if (action == kAccessibleActionDecrement)
+            return setValue(fValue - step, true);
+
+        return false;
+    }
+
 protected:
     // ----------------------------------------------------------------------------------------------------------------
     // NanoDisplay

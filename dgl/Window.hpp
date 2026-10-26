@@ -65,9 +65,8 @@ class TopLevelWidget;
  */
 class DISTRHO_API Window
 {
-   struct PrivateData;
-
 public:
+   struct PrivateData;
    /**
       Window graphics context as a scoped struct.
       This class gives graphics context drawing time to a window's widgets.

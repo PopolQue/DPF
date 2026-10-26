@@ -427,6 +427,26 @@ public:
         return false;
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        if (action == kAccessibleActionIncrement)
+        {
+            adjustActiveHandle(0.05f, 0.05f);
+            return true;
+        }
+        if (action == kAccessibleActionDecrement)
+        {
+            adjustActiveHandle(-0.05f, -0.05f);
+            return true;
+        }
+        return false;
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // Styling & Appearance
 

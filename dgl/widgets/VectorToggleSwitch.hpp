@@ -141,6 +141,21 @@ public:
         setChecked(!fChecked, sendCallback);
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        if (action == kAccessibleActionPress || action == kAccessibleActionIncrement || action == kAccessibleActionDecrement)
+        {
+            toggle(true);
+            return true;
+        }
+        return false;
+    }
+
     Orientation getOrientation() const noexcept
     {
         return fOrientation;

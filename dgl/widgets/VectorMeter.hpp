@@ -185,6 +185,11 @@ public:
             setValueLinear(rightLin, 1);
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
     void updateBallistics(const float deltaTimeSeconds) noexcept
     {
         if (deltaTimeSeconds <= 0.0f)

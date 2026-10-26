@@ -282,6 +282,37 @@ public:
         fUserCallback = cb;
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        if (action == kAccessibleActionIncrement)
+        {
+            if (fCurrentIndex + 1 < static_cast<int32_t>(fItems.size()))
+            {
+                setCurrentIndex(fCurrentIndex + 1, true);
+                return true;
+            }
+        }
+        else if (action == kAccessibleActionDecrement)
+        {
+            if (fCurrentIndex > 0)
+            {
+                setCurrentIndex(fCurrentIndex - 1, true);
+                return true;
+            }
+        }
+        else if (action == kAccessibleActionPress)
+        {
+            setOpen(!fIsOpen);
+            return true;
+        }
+        return false;
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // NanoVG Rendering
 

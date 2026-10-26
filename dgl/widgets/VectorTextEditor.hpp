@@ -233,6 +233,11 @@ public:
         repaint();
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
     bool isFocused() const noexcept
     {
         return fFocused;

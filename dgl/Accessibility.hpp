@@ -42,6 +42,15 @@ enum AccessibleRole {
 };
 
 /**
+   Semantic accessibility actions triggered by assistive technologies (e.g. VoiceOver).
+ */
+enum AccessibleAction {
+    kAccessibleActionPress = 0,
+    kAccessibleActionIncrement,
+    kAccessibleActionDecrement
+};
+
+/**
    Semantic accessibility state for widgets and controls.
  */
 struct AccessibleInfo {
@@ -138,12 +147,37 @@ struct AccessibleInfo {
  */
 class AccessibleElement {
 public:
+    typedef void (*ValueChangeCallback)(AccessibleElement* elem, void* userData);
+
+    AccessibleElement() noexcept
+        : fValueChangeCb(nullptr),
+          fValueChangeUserData(nullptr)
+    {}
+
     virtual ~AccessibleElement() {}
 
     virtual bool isAccessible() const noexcept { return true; }
 
     virtual const AccessibleInfo& getAccessibleInfo() const noexcept { return fAccessibleInfo; }
     virtual AccessibleInfo& getAccessibleInfo() noexcept { return fAccessibleInfo; }
+
+    virtual bool performAccessibleAction(const AccessibleAction action)
+    {
+        (void)action;
+        return false;
+    }
+
+    void setAccessibilityValueChangeCallback(ValueChangeCallback cb, void* userData = nullptr) noexcept
+    {
+        fValueChangeCb = cb;
+        fValueChangeUserData = userData;
+    }
+
+    void notifyAccessibilityValueChanged() noexcept
+    {
+        if (fValueChangeCb != nullptr)
+            fValueChangeCb(this, fValueChangeUserData);
+    }
 
     void setAccessibleRole(const AccessibleRole role) noexcept
     {
@@ -163,6 +197,7 @@ public:
     void setAccessibleValue(const float val, const char* const text = nullptr) noexcept
     {
         fAccessibleInfo.setValue(val, text);
+        notifyAccessibilityValueChanged();
     }
 
     void setAccessibleRange(const float min, const float max, const float step = 0.0f) noexcept
@@ -177,6 +212,8 @@ public:
 
 protected:
     AccessibleInfo fAccessibleInfo;
+    ValueChangeCallback fValueChangeCb;
+    void* fValueChangeUserData;
 };
 
 // --------------------------------------------------------------------------------------------------------------------

@@ -26,6 +26,7 @@ START_NAMESPACE_DGL
 // --------------------------------------------------------------------------------------------------------------------
 // Forward class names
 
+class AccessibleElement;
 class Application;
 class SubWidget;
 class TopLevelWidget;
@@ -278,6 +279,12 @@ public:
       Invisible widgets do not receive events except resize.
     */
     bool isVisible() const noexcept;
+
+   /**
+      Get the AccessibleElement associated with this widget, if any.
+      @return Pointer to AccessibleElement or nullptr if not accessible.
+    */
+    virtual AccessibleElement* getAccessibleElement() noexcept { return nullptr; }
 
    /**
       Set widget visible (or not) according to @a visible.

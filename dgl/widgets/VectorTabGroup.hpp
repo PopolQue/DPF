@@ -148,6 +148,32 @@ public:
             fUserCallback->vectorTabChanged(this, fCurrentTab);
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        if (action == kAccessibleActionIncrement)
+        {
+            if (fCurrentTab + 1 < static_cast<uint32_t>(fTabs.size()))
+            {
+                setCurrentTab(fCurrentTab + 1, true);
+                return true;
+            }
+        }
+        else if (action == kAccessibleActionDecrement)
+        {
+            if (fCurrentTab > 0)
+            {
+                setCurrentTab(fCurrentTab - 1, true);
+                return true;
+            }
+        }
+        return false;
+    }
+
     const String& getTabLabel(const uint32_t index) const noexcept
     {
         static const String sFallback;

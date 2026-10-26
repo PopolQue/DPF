@@ -35,7 +35,8 @@ START_NAMESPACE_DGL
    Features logarithmic frequency axis (20 Hz - 20 kHz), decibel scaling, smooth falloff ballistics,
    peak-hold contour, ISO frequency reticle, and gradient fill rendering.
  */
-class VectorSpectrum : public NanoSubWidget
+class VectorSpectrum : public NanoSubWidget,
+                       public AccessibleElement
 {
 public:
     explicit VectorSpectrum(Widget* const parentWidget, const uint32_t binCount = 256)
@@ -108,6 +109,11 @@ public:
           fCornerRadius(4.0f)
     {
         setBinCount(binCount);
+    }
+
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
     }
 
     // ----------------------------------------------------------------------------------------------------------------

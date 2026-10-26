@@ -48,6 +48,9 @@ UNIT_TESTS   += TestVectorSpectrum
 UNIT_TESTS   += TestThreadPoolAndA11y
 UNIT_TESTS   += TestXYPadAndToggleSwitch
 UNIT_TESTS   += TestEnvelopeAndContextMenu
+ifeq ($(MACOS),true)
+UNIT_TESTS   += TestNativeAccessibility
+endif
 endif
 ifeq ($(HAVE_STUB),true)
 UNIT_TESTS   += Window.stub
@@ -132,6 +135,11 @@ clean:
 	@echo "Compiling $< (Metal)"
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) $(METAL_FLAGS) -DDGL_METAL -c -o $@
 
+../build/tests/%.mm.o: %.mm
+	-@mkdir -p ../build/tests
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) $(OPENGL_FLAGS) -DDGL_OPENGL -c -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 # linking steps
 
@@ -210,9 +218,13 @@ clean:
 	@echo "Linking TestEnvelopeAndContextMenu (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -o $@
 
+../build/tests/TestNativeAccessibility$(APP_EXT): ../build/tests/TestNativeAccessibility.mm.o ../build/libdgl-opengl.a
+	@echo "Linking TestNativeAccessibility (OpenGL)"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -framework Cocoa -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu TestNativeAccessibility
 
 -include $(ALL_OBJS:%.o=%.d)
 

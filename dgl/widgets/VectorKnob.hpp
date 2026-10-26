@@ -223,6 +223,25 @@ public:
         fUserCallback = callback;
     }
 
+    AccessibleElement* getAccessibleElement() noexcept override
+    {
+        return this;
+    }
+
+    bool performAccessibleAction(const AccessibleAction action) override
+    {
+        const float range = getMaximum() - getMinimum();
+        const float step = (range > 0.0f) ? (range * 0.05f) : 0.01f;
+
+        if (action == kAccessibleActionIncrement)
+            return setValue(getValue() + step, true);
+
+        if (action == kAccessibleActionDecrement)
+            return setValue(getValue() - step, true);
+
+        return false;
+    }
+
     // ----------------------------------------------------------------------------------------------------------------
     // Value override
 

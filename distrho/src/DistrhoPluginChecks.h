@@ -21,7 +21,9 @@
 # error wrong include order
 #endif
 
-#include "DistrhoPluginInfo.h"
+#ifndef DISTRHO_PLUGIN_INFO_H_INCLUDED
+# include "DistrhoPluginInfo.h"
+#endif
 
 // --------------------------------------------------------------------------------------------------------------------
 // Check if all required macros are defined

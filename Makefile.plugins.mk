@@ -420,6 +420,7 @@ endif
 ifeq ($(MACOS),true)
 BUNDLE_RESOURCES = Info.plist PkgInfo Resources/empty.lproj
 au         = $(TARGET_DIR)/$(NAME).component/Contents/MacOS/$(NAME)
+auv3       = $(TARGET_DIR)/$(NAME).appex/Contents/MacOS/$(NAME)
 aufiles   += $(BUNDLE_RESOURCES:%=$(TARGET_DIR)/$(NAME).component/Contents/%)
 vst2files += $(BUNDLE_RESOURCES:%=$(TARGET_DIR)/$(NAME).vst/Contents/%)
 vst3files += $(BUNDLE_RESOURCES:%=$(TARGET_DIR)/$(NAME).vst3/Contents/%)
@@ -542,6 +543,7 @@ endif
 	rm -rf $(TARGET_DIR)/$(NAME)-*
 	rm -rf $(TARGET_DIR)/$(NAME).clap
 	rm -rf $(TARGET_DIR)/$(NAME).component
+	rm -rf $(TARGET_DIR)/$(NAME).appex
 	rm -rf $(TARGET_DIR)/$(NAME).lv2
 	rm -rf $(TARGET_DIR)/$(NAME).vst
 	rm -rf $(TARGET_DIR)/$(NAME).vst3
@@ -611,10 +613,12 @@ $(BUILD_DIR)/DistrhoUI_win32.cpp.o: $(DPF_PATH)/distrho/DistrhoUI_win32.cpp $(EX
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -std=gnu++17 -c -o $@
 
 $(BUILD_DIR)/DistrhoPluginMain_AU.cpp.o: BUILD_CXX_FLAGS += -ObjC++
+$(BUILD_DIR)/DistrhoPluginMain_AUV3.cpp.o: BUILD_CXX_FLAGS += -ObjC++
 
 $(BUILD_DIR)/DistrhoPluginMain_JACK.cpp.o: BUILD_CXX_FLAGS += $(JACK_FLAGS)
 
 $(BUILD_DIR)/DistrhoUIMain_AU.cpp.o: BUILD_CXX_FLAGS += -ObjC++
+$(BUILD_DIR)/DistrhoUIMain_AUV3.cpp.o: BUILD_CXX_FLAGS += -ObjC++
 
 $(BUILD_DIR)/DistrhoUIMain_DSSI.cpp.o: BUILD_CXX_FLAGS += $(LIBLO_FLAGS)
 
@@ -842,6 +846,20 @@ endif
 	-@mkdir -p $(shell dirname $@)
 	@echo "Creating AU component for $(NAME)"
 	$(SILENT)$(CXX) $^ $(BUILD_CXX_FLAGS) $(LINK_FLAGS) $(EXTRA_LIBS) $(EXTRA_DSP_LIBS) $(EXTRA_UI_LIBS) $(DGL_LIBS) -framework AudioToolbox -framework AudioUnit -framework CoreFoundation $(SHARED) $(SYMBOLS_AU) -o $@
+
+# ---------------------------------------------------------------------------------------------------------------------
+# AUv3
+
+auv3: $(auv3)
+
+ifeq ($(HAVE_DGL),true)
+$(auv3): $(OBJS_DSP) $(OBJS_UI) $(BUILD_DIR)/DistrhoPluginMain_AUV3.cpp.o $(BUILD_DIR)/DistrhoUIMain_AUV3.cpp.o $(DGL_LIB)
+else
+$(auv3): $(OBJS_DSP) $(BUILD_DIR)/DistrhoPluginMain_AUV3.cpp.o
+endif
+	-@mkdir -p $(shell dirname $@)
+	@echo "Creating AUv3 appex for $(NAME)"
+	$(SILENT)$(CXX) $^ $(BUILD_CXX_FLAGS) $(LINK_FLAGS) $(EXTRA_LIBS) $(EXTRA_DSP_LIBS) $(EXTRA_UI_LIBS) $(DGL_LIBS) -framework AudioToolbox -framework CoreAudioKit -framework AVFoundation -framework CoreFoundation $(SHARED) -o $@
 
 # ---------------------------------------------------------------------------------------------------------------------
 # MAPI

@@ -50,6 +50,7 @@ UNIT_TESTS   += TestXYPadAndToggleSwitch
 UNIT_TESTS   += TestEnvelopeAndContextMenu
 ifeq ($(MACOS),true)
 UNIT_TESTS   += TestNativeAccessibility
+UNIT_TESTS   += TestAUv3
 endif
 endif
 ifeq ($(HAVE_STUB),true)
@@ -222,9 +223,13 @@ clean:
 	@echo "Linking TestNativeAccessibility (OpenGL)"
 	$(SILENT)$(CXX) $^ $(LINK_FLAGS) $(DGL_SYSTEM_LIBS) $(OPENGL_LIBS) -framework Cocoa -o $@
 
+../build/tests/TestAUv3$(APP_EXT): ../build/tests/TestAUv3.mm.o
+	@echo "Linking TestAUv3"
+	$(SILENT)$(CXX) $^ $(LINK_FLAGS) -framework AudioToolbox -framework CoreAudioKit -framework AVFoundation -framework Cocoa -o $@
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu TestNativeAccessibility
+.PHONY: Demo.opengl FileBrowserDialog NanoImage NanoSubWidgets TestVectorWidgets TestVectorScopeAndTabs TestVectorSpectrum TestThreadPoolAndA11y TestXYPadAndToggleSwitch TestEnvelopeAndContextMenu TestNativeAccessibility TestAUv3
 
 -include $(ALL_OBJS:%.o=%.d)
 

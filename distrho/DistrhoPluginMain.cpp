@@ -18,6 +18,8 @@
 
 #if defined(DISTRHO_PLUGIN_TARGET_AU)
 # include "src/DistrhoPluginAU.cpp"
+#elif defined(DISTRHO_PLUGIN_TARGET_AUV3)
+# import "src/DistrhoPluginAUv3.mm"
 #elif defined(DISTRHO_PLUGIN_TARGET_CARLA)
 # include "src/DistrhoPluginCarla.cpp"
 #elif defined(DISTRHO_PLUGIN_TARGET_CLAP)

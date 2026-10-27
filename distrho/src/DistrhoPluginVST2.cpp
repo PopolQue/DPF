@@ -1105,6 +1105,10 @@ public:
 
     void vst_processDoubleReplacing(const double** const inputs, double** const outputs, const int32_t sampleFrames)
     {
+        // may be unused when the plugin has no audio inputs/outputs
+        (void)inputs;
+        (void)outputs;
+
         if (! fPlugin.isActive())
         {
             // host has not activated the plugin yet, nasty!

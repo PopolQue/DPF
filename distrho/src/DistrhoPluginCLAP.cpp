@@ -2744,10 +2744,10 @@ public:
             ui->notifyParamIndication(param_id, has_mapping, colorRGBA, label != nullptr ? label : "");
         }
        #else
-        d_unused(param_id);
-        d_unused(has_mapping);
-        d_unused(color);
-        d_unused(label);
+        (void)param_id;
+        (void)has_mapping;
+        (void)color;
+        (void)label;
        #endif
     }
 
@@ -2762,9 +2762,9 @@ public:
             ui->notifyParamIndication(param_id, automation_state != 0, colorRGBA, "");
         }
        #else
-        d_unused(param_id);
-        d_unused(automation_state);
-        d_unused(color);
+        (void)param_id;
+        (void)automation_state;
+        (void)color;
        #endif
     }
 
